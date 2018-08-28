@@ -9,7 +9,7 @@ import tensorflow as tf
 import skimage.io
 import skimage.transform
 import matplotlib.pyplot as plt
-get_ipython().magic('matplotlib inline')
+#get_ipython().magic('matplotlib inline')
 
 
 # # Get data
@@ -17,6 +17,7 @@ get_ipython().magic('matplotlib inline')
 
 
 IMG_SIZE = 32
+FEATURE_SIZE = 50
 
 
 
@@ -41,6 +42,7 @@ def load_img(path):
 def load_data(image_dir, part_dir_list):
     image_list = []
     label_list = []
+    feat_list = []
     for k in range(len(part_dir_list)):
         part_name = part_dir_list[k]
         dir = image_dir + part_name
@@ -56,14 +58,18 @@ def load_data(image_dir, part_dir_list):
             tag = np.zeros((1, len(part_dir_list)))
             tag[0][k] = 1
             label_list.append(tag)
+            
+            feature = np.full((1, FEATURE_SIZE), k/1.0)
+            feat_list.append(feature)
 
 #            if len(imgs[k]) == 400:        # only use 400 imgs to reduce my memory load
 #                break
     
     image_data = np.concatenate(image_list, axis=0)
     label_data = np.concatenate(label_list, axis=0)
+    feat_data = np.concatenate(feat_list, axis=0)
     
-    return image_data, label_data
+    return image_data, label_data, feat_data
 
 
 
@@ -79,8 +85,8 @@ part_list = ['out', 'in']
 
 
 
-train_dataset, label_dataset = load_data(train_image_dir, part_dir_list=part_list)
-test_dataset, test_label = load_data(test_image_dir, part_dir_list=part_list)
+train_dataset, label_dataset, feature_dataset = load_data(train_image_dir, part_dir_list=part_list)
+test_dataset, test_label, test_feature = load_data(test_image_dir, part_dir_list=part_list)
 
 
 
@@ -92,12 +98,18 @@ train_dataset.shape
 
 label_dataset
 label_dataset.shape
-#label_dataset[2]
+label_dataset[2]
 
 
 
 
-plt.imshow(train_dataset[2])
+feature_dataset.shape
+#train_feature[55]
+
+
+
+
+#plt.imshow(train_dataset[2])
 
 
 # # Model
@@ -112,7 +124,7 @@ import tensorflow as tf
 x = tf.placeholder(tf.float32,shape=[None, IMG_SIZE, IMG_SIZE, 3])
 #x = tf.placeholder(tf.float32,shape=[None,32,32,3])
 y_true = tf.placeholder(tf.float32,shape=[None,len(part_list)])
-#x_ext = tf.placeholder(tf.float32,shape=[None,len(part_list)])
+x_feat = tf.placeholder(tf.float32,shape=[None,FEATURE_SIZE])
 
 
 
@@ -172,7 +184,7 @@ convo_2_flat = tf.reshape(convo_2_pooling, [-1, size*size*64])
 
 
 
-#convo_2_flat_ext = tf.concat( [convo_2_flat, x_ext ], 1 )
+#convo_2_flat_ext = tf.concat( [convo_2_flat, x_feat ], 1 )
 
 
 
@@ -187,7 +199,13 @@ full_one_dropout = tf.nn.dropout(full_layer_one,keep_prob=hold_prob)
 
 
 
-y_pred = normal_full_layer(full_one_dropout,len(part_list))
+full_feature = tf.concat( [full_one_dropout, x_feat], 1 )
+
+
+
+
+#y_pred = normal_full_layer(full_one_dropout,len(part_list))
+y_pred = normal_full_layer(full_feature, len(part_list))
 
 
 
@@ -206,10 +224,7 @@ train = optimizer.minimize(cross_entropy)
 init = tf.global_variables_initializer()
 
 
-
-
-# Graph session
-
+# # Graph session
 
 
 
@@ -223,10 +238,14 @@ with tf.Session() as sess:
         batch_size = 2
         x_dataset = train_dataset[index:index+batch_size].reshape(-1, IMG_SIZE, IMG_SIZE, 3)
         y_dataset = label_dataset[index:index+batch_size].reshape(-1, len(part_list))
+        f_dataset = feature_dataset[index:index+batch_size].reshape(-1, FEATURE_SIZE)
+        
+        print('y shape = ', y_dataset.shape)
+        print('f shape = ', f_dataset.shape)
         
         index = (index+batch_size) % len(train_dataset)
         
-        sess.run(train, feed_dict={x: x_dataset, y_true: y_dataset, hold_prob: 0.5})
+        sess.run(train, feed_dict={x: x_dataset, y_true: y_dataset, x_feat: f_dataset, hold_prob: 0.5})
         
         # PRINT OUT A MESSAGE EVERY 100 STEPS
         if i%100 == 0:
@@ -238,7 +257,7 @@ with tf.Session() as sess:
 
             acc = tf.reduce_mean(tf.cast(matches,tf.float32))
 
-            print(sess.run(acc,feed_dict={x:test_dataset, y_true:test_label, hold_prob:1.0}))
+            print(sess.run(acc,feed_dict={x:test_dataset, y_true:test_label, x_feat:test_feature, hold_prob:1.0}))
             print('\n')
             
             saver.save(sess, save_path, write_meta_graph=False)
