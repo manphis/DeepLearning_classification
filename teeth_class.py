@@ -4,12 +4,38 @@ import numpy as np
 import tensorflow as tf
 import skimage.io
 import skimage.transform
+import tensorflow.contrib.slim as slim
+import Utils as utils
+from collections import namedtuple
 
-IMAGE_SIZE = 32
+IMAGE_SIZE = 224
 FEATURE_CLASS = 4
 
 part_list = ['in_down_left', 'in_down_right', 'in_down_center', 'in_up_left', 'in_up_right', 'in_up_center',
             'out_down_left', 'out_down_right', 'out_down_center', 'out_up_left', 'out_up_right', 'out_up_center']
+
+MODEL_URL = 'http://download.tensorflow.org/models/mobilenet_v1_1.0_224_2017_06_14.tar.gz'
+IMAGE_NET_MEAN = [103.939, 116.779, 123.68]
+
+Conv = namedtuple('Conv', ['kernel', 'stride', 'depth'])
+DepthSepConv = namedtuple('DepthSepConv', ['kernel', 'stride', 'depth'])
+# _CONV_DEFS specifies the MobileNet body
+_CONV_DEFS = [
+    Conv(kernel=[3, 3], stride=2, depth=32),
+    DepthSepConv(kernel=[3, 3], stride=1, depth=64),
+    DepthSepConv(kernel=[3, 3], stride=2, depth=128),
+    DepthSepConv(kernel=[3, 3], stride=1, depth=128),
+    DepthSepConv(kernel=[3, 3], stride=2, depth=256),
+    DepthSepConv(kernel=[3, 3], stride=1, depth=256),
+    DepthSepConv(kernel=[3, 3], stride=2, depth=512),
+    DepthSepConv(kernel=[3, 3], stride=1, depth=512),
+    DepthSepConv(kernel=[3, 3], stride=1, depth=512),
+    DepthSepConv(kernel=[3, 3], stride=1, depth=512),
+    DepthSepConv(kernel=[3, 3], stride=1, depth=512),
+    DepthSepConv(kernel=[3, 3], stride=1, depth=512),
+    DepthSepConv(kernel=[3, 3], stride=2, depth=1024),
+    DepthSepConv(kernel=[3, 3], stride=1, depth=1024)
+]
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--feature", help="input the size of feature", type=int)
@@ -91,6 +117,38 @@ def create_feature(image_dir, part_dir_list, feature_size):
     return feat_data
 
 
+def mobile_net(image, final_endpoint=None):
+    with tf.variable_scope('MobilenetV1'):
+        net = image
+        with slim.arg_scope([slim.conv2d, slim.separable_conv2d], padding='SAME'):
+            for i, conv_def in enumerate(_CONV_DEFS):
+                end_point_base = 'Conv2d_%d' % i
+                if isinstance(conv_def, Conv):
+                    net = slim.conv2d(net, conv_def.depth, conv_def.kernel,
+                                      stride=conv_def.stride,
+#                                      normalizer_fn=slim.batch_norm,
+                                      scope=end_point_base)
+                elif isinstance(conv_def, DepthSepConv):
+                    end_point = end_point_base + '_depthwise'
+                    net = slim.separable_conv2d(net, None, conv_def.kernel,
+                                                depth_multiplier=1, 
+                                                stride=conv_def.stride,
+                                                rate=1,
+                                                normalizer_fn=slim.batch_norm,
+                                                scope=end_point)
+
+                    end_point = end_point_base + '_pointwise'
+                    net = slim.conv2d(net, conv_def.depth, [1, 1],
+                                      stride=1,
+#                                      normalizer_fn=slim.batch_norm,
+                                      scope=end_point)
+#                    print("end_point_base="+end_point_base)
+                if final_endpoint and final_endpoint == end_point_base:
+                    print("break end_point_base==final_endpoint="+end_point_base)
+                    break
+    return net
+
+
 class MyNet:
 	def __init__(self, image_size, category_size, feature_size=0):
 		self.x = tf.placeholder(tf.float32,shape=[None, image_size, image_size, 3])
@@ -102,14 +160,21 @@ class MyNet:
 		self.feature_size = feature_size
 
 #		Create layers
-		convo_1 = self.convolutional_layer(self.x, shape=[4,4,3,32])
-		convo_1_pooling = self.max_pool_2by2(convo_1)
+#		convo_1 = self.convolutional_layer(self.x, shape=[4,4,3,32])
+#		convo_1_pooling = self.max_pool_2by2(convo_1)
 
-		convo_2 = self.convolutional_layer(convo_1_pooling,shape=[4,4,32,64])
-		convo_2_pooling = self.max_pool_2by2(convo_2)
+#		convo_2 = self.convolutional_layer(convo_1_pooling,shape=[4,4,32,64])
+#		convo_2_pooling = self.max_pool_2by2(convo_2)
 
-		self.size = (int)(image_size/4)
-		convo_2_flat = tf.reshape(convo_2_pooling, [-1, self.size*self.size*64])
+		
+		
+		mobilenet_net = self.get_mobile_net(self.x, self.hold_prob)
+#		shape of mobilenet_net: (?, 14, 14, 512)
+
+#		self.size = (int)(image_size/4)
+#		convo_2_flat = tf.reshape(convo_2_pooling, [-1, self.size*self.size*64])
+		self.size = 14*14*512
+		convo_2_flat = tf.reshape(mobilenet_net, [-1, self.size])
 
 		full_layer_one = tf.nn.relu(self.normal_full_layer(convo_2_flat, 1024))
 		full_one_dropout = tf.nn.dropout(full_layer_one, keep_prob=self.hold_prob)
@@ -182,6 +247,13 @@ class MyNet:
 	    b = self.init_bias([size])
 	    return tf.matmul(input_layer, W) + b
 
+	def get_mobile_net(self, image, dropout_keep_prob):
+		print("setting up mobile initialized conv layers ...")
+		mean = tf.constant(IMAGE_NET_MEAN)
+		image -= mean
+		net = mobile_net(image, final_endpoint="Conv2d_11")
+		return net
+
 
 
 
@@ -191,6 +263,8 @@ class MyNet:
 def train(_feature_size):
 	train_image_dir = 'train_img/'
 	test_image_dir = 'test_img/'
+	test_feature = np.array([])
+	f_dataset = np.array([])
 
 	train_dataset, label_dataset = load_data(train_image_dir, part_dir_list=part_list)
 	test_dataset, test_label = load_data(test_image_dir, part_dir_list=part_list)
@@ -206,8 +280,7 @@ def train(_feature_size):
 	for i in range(5000):
 		x_dataset = train_dataset[index:index+batch_size].reshape(-1, IMAGE_SIZE, IMAGE_SIZE, 3)
 		y_dataset = label_dataset[index:index+batch_size].reshape(-1, len(part_list))
-		f_dataset = np.array([])
-		test_feature = np.array([])
+		
 		if _feature_size != 0:
 			f_dataset = feature_dataset[index:index+batch_size].reshape(-1, _feature_size)
 
