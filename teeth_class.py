@@ -8,12 +8,14 @@ import tensorflow.contrib.slim as slim
 import Utils as utils
 from collections import namedtuple
 
+
 IMAGE_SIZE = 224
 FEATURE_CLASS = 4
 
 part_list = ['in_down_left', 'in_down_right', 'in_down_center', 'in_up_left', 'in_up_right', 'in_up_center',
             'out_down_left', 'out_down_right', 'out_down_center', 'out_up_left', 'out_up_right', 'out_up_center']
-
+LEARNING_RATE = 0.0001
+MODEL_DIR = 'Model_zoo/'
 MODEL_URL = 'http://download.tensorflow.org/models/mobilenet_v1_1.0_224_2017_06_14.tar.gz'
 IMAGE_NET_MEAN = [103.939, 116.779, 123.68]
 
@@ -159,6 +161,8 @@ class MyNet:
 
 		self.feature_size = feature_size
 
+		utils.get_model_data(MODEL_DIR, MODEL_URL)
+
 #		Create layers
 #		convo_1 = self.convolutional_layer(self.x, shape=[4,4,3,32])
 #		convo_1_pooling = self.max_pool_2by2(convo_1)
@@ -190,7 +194,7 @@ class MyNet:
 		self.sess = tf.Session()
 
 		self.cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.y_true,logits=self.y_pred))
-		self.optimizer = tf.train.AdamOptimizer(learning_rate=0.001)
+		self.optimizer = tf.train.AdamOptimizer(learning_rate=LEARNING_RATE)
 		self.train_op = self.optimizer.minimize(self.cross_entropy)
 
 		self.matches = tf.equal(tf.argmax(self.y_pred,1),tf.argmax(self.y_true,1))
