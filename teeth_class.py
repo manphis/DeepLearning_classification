@@ -200,6 +200,8 @@ class MyNet:
 		self.matches = tf.equal(tf.argmax(self.y_pred,1),tf.argmax(self.y_true,1))
 		self.acc = tf.reduce_mean(tf.cast(self.matches,tf.float32))
 
+		self.c_matrix = tf.confusion_matrix(tf.argmax(self.y_pred,1), tf.argmax(self.y_true,1))
+
 		self.sess.run(tf.global_variables_initializer())
 
 		print("build MyNet done")
@@ -223,6 +225,14 @@ class MyNet:
 			result = self.sess.run(self.acc, feed_dict={self.x:test_dataset, self.y_true:test_label, self.hold_prob:1.0})
 
 		return result
+
+	def validate_matrix(self, test_dataset, test_label, test_feature):
+		if self.feature_size != 0:
+			result, matrix = self.sess.run([self.acc, self.c_matrix], feed_dict={self.x:test_dataset, self.y_true:test_label, self.x_feat:test_feature, self.hold_prob:1.0})
+		else:
+			result, matrix = self.sess.run([self.acc, self.c_matrix], feed_dict={self.x:test_dataset, self.y_true:test_label, self.hold_prob:1.0})
+
+		return result, matrix
 
 
 	def init_weights(self, shape):
@@ -293,7 +303,8 @@ def train(_feature_size):
 		loss = my_net.train(x_dataset, y_dataset, f_dataset)
 #		print("loss = ", loss)
 		if i%100 == 0:
-			acc = my_net.validate(test_dataset, test_label, test_feature)
+			acc, matrix = my_net.validate_matrix(test_dataset, test_label, test_feature)
+			print(matrix)
 			print('step {}'.format(i), ' ; loss = ', loss, ' ; accuracy = ', acc)
             
 #            saver.save(sess, save_path, write_meta_graph=False)
