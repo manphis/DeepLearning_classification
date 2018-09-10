@@ -120,35 +120,37 @@ def create_feature(image_dir, part_dir_list, feature_size):
 
 
 def mobile_net(image, final_endpoint=None):
-    with tf.variable_scope('MobilenetV1'):
-        net = image
-        with slim.arg_scope([slim.conv2d, slim.separable_conv2d], padding='SAME'):
-            for i, conv_def in enumerate(_CONV_DEFS):
-                end_point_base = 'Conv2d_%d' % i
-                if isinstance(conv_def, Conv):
-                    net = slim.conv2d(net, conv_def.depth, conv_def.kernel,
+	print("setting up mobile initialized conv layers ...")
+	with tf.variable_scope('MobilenetV1'):
+		net = image
+		with slim.arg_scope([slim.conv2d, slim.separable_conv2d], padding='SAME'):
+			for i, conv_def in enumerate(_CONV_DEFS):
+				end_point_base = 'Conv2d_%d' % i
+				if isinstance(conv_def, Conv):
+					net = slim.conv2d(net, conv_def.depth, conv_def.kernel,
                                       stride=conv_def.stride,
-#                                      normalizer_fn=slim.batch_norm,
+                                      normalizer_fn=slim.batch_norm,
                                       scope=end_point_base)
-                elif isinstance(conv_def, DepthSepConv):
-                    end_point = end_point_base + '_depthwise'
-                    net = slim.separable_conv2d(net, None, conv_def.kernel,
+				elif isinstance(conv_def, DepthSepConv):
+					end_point = end_point_base + '_depthwise'
+					net = slim.separable_conv2d(net, None, conv_def.kernel,
                                                 depth_multiplier=1, 
                                                 stride=conv_def.stride,
                                                 rate=1,
                                                 normalizer_fn=slim.batch_norm,
                                                 scope=end_point)
 
-                    end_point = end_point_base + '_pointwise'
-                    net = slim.conv2d(net, conv_def.depth, [1, 1],
+					end_point = end_point_base + '_pointwise'
+					net = slim.conv2d(net, conv_def.depth, [1, 1],
                                       stride=1,
-#                                      normalizer_fn=slim.batch_norm,
+                                      normalizer_fn=slim.batch_norm,
                                       scope=end_point)
 #                    print("end_point_base="+end_point_base)
-                if final_endpoint and final_endpoint == end_point_base:
-                    print("break end_point_base==final_endpoint="+end_point_base)
-                    break
-    return net
+				if final_endpoint and final_endpoint == end_point_base:
+					print("break end_point_base==final_endpoint="+end_point_base)
+					break
+	return net
+
 
 
 class MyNet:
@@ -172,7 +174,8 @@ class MyNet:
 
 		
 		
-		mobilenet_net = self.get_mobile_net(self.x, self.hold_prob)
+		mobilenet_net = self.get_mobile_net(self.x, final_endpoint="Conv2d_11")
+		variable_to_restore = [v for v in slim.get_variables_to_restore() if v.name.split('/')[0] == 'MobilenetV1']
 #		shape of mobilenet_net: (?, 14, 14, 512)
 
 #		self.size = (int)(image_size/4)
@@ -203,6 +206,10 @@ class MyNet:
 		self.c_matrix = tf.confusion_matrix(tf.argmax(self.y_pred,1), tf.argmax(self.y_true,1))
 
 		self.sess.run(tf.global_variables_initializer())
+
+#		restore pre-train mobilenet
+		self.saver = tf.train.Saver(variable_to_restore)
+		self.saver.restore(self.sess, 'Model_zoo/mobilenet_v1_1.0_224.ckpt')
 
 		print("build MyNet done")
 
@@ -261,16 +268,12 @@ class MyNet:
 	    b = self.init_bias([size])
 	    return tf.matmul(input_layer, W) + b
 
-	def get_mobile_net(self, image, dropout_keep_prob):
-		print("setting up mobile initialized conv layers ...")
+	def get_mobile_net(self, image, final_endpoint=None):
 		mean = tf.constant(IMAGE_NET_MEAN)
 		image -= mean
-		net = mobile_net(image, final_endpoint="Conv2d_11")
+		net = mobile_net(image, final_endpoint)
+
 		return net
-
-
-
-
 
 	
 
@@ -312,7 +315,7 @@ def train(_feature_size):
 
 	return
 
-def test():
+def test_dataset():
 	train_image_dir = 'train_img/'
 	feature_dataset = create_feature(train_image_dir, part_dir_list=part_list, feature_size=args.feature)
 
@@ -324,6 +327,6 @@ if __name__ == '__main__':
 		_feature_size = 0
 	else:
 		_feature_size = args.feature
-	print("feature size = ", _feature_size)
+
 	train(_feature_size)
 #	test()
