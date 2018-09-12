@@ -322,11 +322,20 @@ def test_dataset():
 	print(feature_dataset.shape)
 	return
 
+def test_confusion_matrix():
+	matrix = tf.confusion_matrix([1,1,1], [1,2,4])
+	sess = tf.Session()
+	matrix_result = sess.run(matrix)
+
+	print(matrix_result)
+
+	return
+
 if __name__ == '__main__':
 	if args.feature == None:
 		_feature_size = 0
 	else:
 		_feature_size = args.feature
 
-	train(_feature_size)
-#	test()
+#	train(_feature_size)
+	test_confusion_matrix()
