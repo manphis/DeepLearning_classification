@@ -8,6 +8,7 @@ import tensorflow.contrib.slim as slim
 import Utils as utils
 from collections import namedtuple
 import matplotlib.pyplot as plt
+from numpy import array
 
 
 IMAGE_SIZE = 224
@@ -121,6 +122,30 @@ def create_feature(image_dir, part_dir_list, feature_size):
     
     return feat_data
 
+def create_feature_foreach(image_dir, part_dir_list, feature_size):
+    feat_list = []
+    feat_array = np.linspace(0, 1, len(part_dir_list))
+    
+    for k in range(len(part_dir_list)):
+        count = 0
+        part_name = part_dir_list[k]
+        dir = image_dir + part_name
+
+        index = k
+
+        for file in os.listdir(dir):
+            if not file.lower().endswith('.jpg'):
+                continue
+            count = count + 1
+
+        feature = np.full((count, feature_size), feat_array[index])
+        print(feature)
+        feat_list.append(feature)
+
+    feat_data = np.concatenate(feat_list, axis=0)
+    
+    return feat_data
+
 
 def mobile_net(image, final_endpoint=None):
     print("setting up mobile initialized conv layers ...")
@@ -191,7 +216,9 @@ class MyNet:
 
         print("feature size = ", feature_size)
         if feature_size != 0:
+            print('Add feature array!!!')
             full_feature = tf.concat( [full_one_dropout, self.x_feat], 1 )
+            print('fully conn network: ', full_feature)
             self.y_pred = self.normal_full_layer(full_feature, category_size)
         else:
             self.y_pred = self.normal_full_layer(full_one_dropout, category_size)
@@ -304,8 +331,8 @@ class MyNet:
     
 
 def train(_feature_size):
-    train_image_dir = 'train_img/'
-    test_image_dir = 'test_img/'
+    train_image_dir = 'Q8H/train_img/'
+    test_image_dir = 'Q8H/test_img/'
     test_feature = np.array([])
     f_dataset = np.array([])
 
@@ -317,6 +344,7 @@ def train(_feature_size):
 
     batch_size = 2
     index = 0
+    accuracy_list = []
 
     my_net = MyNet(image_size=IMAGE_SIZE, category_size=len(part_list), feature_size=_feature_size)
 
@@ -336,13 +364,15 @@ def train(_feature_size):
             print(matrix)
             print('step {}'.format(i), ' ; loss = ', loss, ' ; accuracy = ', acc)
 
+            accuracy_list.append(acc)
             my_net.save_checkpoint(LOG_DIR + "model.ckpt", i)
 
-
+#    save_train_result(accuracy_list)
+    print(accuracy_list)
     return
 
 def predict(_feature_size):
-    predict_image_dir = 'test_img/'
+    predict_image_dir = 'Q8H/test_img/'
     predict_feature = np.array([])
     predict_dataset, predict_label = load_data(predict_image_dir, part_dir_list=part_list)
 
@@ -353,6 +383,42 @@ def predict(_feature_size):
 
     result = my_net.predict(predict_dataset, predict_feature)
 
+    plot_error_result(predict_dataset, result)
+
+    return
+
+
+def plot_error_result(predict_dataset, result):
+    error_count = 0
+    error_list = []
+    for k in range(len(result)):
+        if result[k] != int(k/2):
+            error_count += 1
+            error_list.append(k)
+
+    num_col = 4
+    num_row = int(error_count/4) + 1
+    fig, axs = plt.subplots(num_row, num_col)
+    show_count = 0
+
+    for i in range(num_row):
+        for j in range(num_col):
+            index = error_list[show_count]
+            axs[i][j].imshow(predict_dataset[index])
+            title = part_list[result[index]] + '-->' + part_list[int(index/2)]
+            
+            axs[i][j].set_title(title)
+            axs[i][j].set_xticks(())
+            axs[i][j].set_yticks(())
+
+            show_count += 1
+            if show_count == error_count:
+                break
+    plt.show()
+
+    return
+
+def plot_predict_result(predict_dataset, result):
     num_row = int(len(predict_dataset)/6)
     num_col = 6
     fig, axs = plt.subplots(num_row, num_col)
@@ -372,6 +438,23 @@ def predict(_feature_size):
 
     return
 
+def save_train_result(acc_list):
+    print('save_train_result')
+    x = array(np.arange(len(acc_list)))
+    y = array(acc_list)
+    plt.xlabel('training iterations (1/100)')
+    plt.ylabel('Accuracy')
+    plt.bar(x, y)
+    plt.savefig('accuracy.png')
+    plt.close()
+
+    plt.xlabel('Accuracy')
+    plt.ylabel('times')
+    plt.hist(acc_list)
+    plt.savefig('histogram.png')
+
+    return
+
 def test_dataset():
     train_image_dir = 'train_img/'
     feature_dataset = create_feature(train_image_dir, part_dir_list=part_list, feature_size=args.feature)
@@ -386,6 +469,10 @@ def test_confusion_matrix():
 
     print(matrix_result)
 
+    return
+
+def test_save_train_result():
+    save_train_result([1,1,1,4,5,5,5,7,7,7,7,1])
     return
 
 if __name__ == '__main__':
