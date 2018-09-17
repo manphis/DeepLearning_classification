@@ -7,15 +7,18 @@ import skimage.transform
 import tensorflow.contrib.slim as slim
 import Utils as utils
 from collections import namedtuple
-import matplotlib.pyplot as plt
-from numpy import array
+import plot_utils as pu
+import image_loader as iLoader
 
 
 IMAGE_SIZE = 224
 FEATURE_CLASS = 4
 
-part_list = ['in_down_left', 'in_down_right', 'in_down_center', 'in_up_left', 'in_up_right', 'in_up_center',
-            'out_down_left', 'out_down_right', 'out_down_center', 'out_up_left', 'out_up_right', 'out_up_center']
+#part_list = ['in_down_left', 'in_down_right', 'in_down_center', 'in_up_left', 'in_up_right', 'in_up_center',
+#            'out_down_left', 'out_down_right', 'out_down_center', 'out_up_left', 'out_up_right', 'out_up_center']
+
+TEETH_PART_LIST = ['InDownLeft', 'InDownRight', 'InDownCenter', 'InUpLeft', 'InUpRight', 'InUpCenter',
+'OutDownLeft', 'OutDownRight', 'OutDownCenter', 'OutUpLeft', 'OutUpRight', 'OutUpCenter']
 LEARNING_RATE = 0.0001
 MODEL_DIR = 'Model_zoo/'
 LOG_DIR = 'logs/'
@@ -47,104 +50,6 @@ parser.add_argument("--feature", help="input the size of feature", type=int)
 parser.add_argument("--mode", help="input mode: train or predict", type=str)
 args = parser.parse_args()
 print (args.feature)
-
-def load_img(path):
-    img = skimage.io.imread(path)
-    img = img / 255.0
-    # print "Original Image Shape: ", img.shape
-    # we crop image from center
-    short_edge = min(img.shape[:2])
-    yy = int((img.shape[0] - short_edge) / 2)
-    xx = int((img.shape[1] - short_edge) / 2)
-    crop_img = img[yy: yy + short_edge, xx: xx + short_edge]
-    # resize to 224, 224
-    resized_img = skimage.transform.resize(crop_img, (IMAGE_SIZE, IMAGE_SIZE))[None, :, :, :]   # shape [1, 224, 224, 3]
-#    resized_img = skimage.transform.resize(crop_img, (32, 32))[None, :, :, :]   # shape [1, 32, 32, 3]
-    return resized_img
-
-def load_data(image_dir, part_dir_list):
-    image_list = []
-    label_list = []
-    
-    for k in range(len(part_dir_list)):
-        part_name = part_dir_list[k]
-        dir = image_dir + part_name
-        
-        for file in os.listdir(dir):
-            if not file.lower().endswith('.jpg'):
-                continue
-            try:
-                resized_img = load_img(os.path.join(dir, file))
-            except OSError:
-                continue
-            image_list.append(resized_img)    # [1, height, width, depth] * n
-            
-            tag = np.zeros((1, len(part_dir_list)))
-            tag[0][k] = 1
-            label_list.append(tag)
-
-#            if len(imgs[k]) == 400:        # only use 400 imgs to reduce my memory load
-#                break
-    
-    image_data = np.concatenate(image_list, axis=0)
-    label_data = np.concatenate(label_list, axis=0)
-    
-    return image_data, label_data
-
-def create_feature(image_dir, part_dir_list, feature_size):
-    feat_list = []
-    feat_array = np.linspace(0, 1, FEATURE_CLASS)
-    
-    for k in range(len(part_dir_list)):
-        count = 0
-        part_name = part_dir_list[k]
-        dir = image_dir + part_name
-
-        index = 0
-        if k==0 or k==3 or k==7 or k==10:   #category 1
-            index = 0
-        elif k==2:
-            index = 2
-        elif k==5:
-            index = 3
-        else:
-            index = 1
-
-        for file in os.listdir(dir):
-            if not file.lower().endswith('.jpg'):
-                continue
-            count = count + 1
-
-        feature = np.full((count, feature_size), feat_array[index])
-        feat_list.append(feature)
-
-    feat_data = np.concatenate(feat_list, axis=0)
-    
-    return feat_data
-
-def create_feature_foreach(image_dir, part_dir_list, feature_size):
-    feat_list = []
-    feat_array = np.linspace(0, 1, len(part_dir_list))
-    
-    for k in range(len(part_dir_list)):
-        count = 0
-        part_name = part_dir_list[k]
-        dir = image_dir + part_name
-
-        index = k
-
-        for file in os.listdir(dir):
-            if not file.lower().endswith('.jpg'):
-                continue
-            count = count + 1
-
-        feature = np.full((count, feature_size), feat_array[index])
-        print(feature)
-        feat_list.append(feature)
-
-    feat_data = np.concatenate(feat_list, axis=0)
-    
-    return feat_data
 
 
 def mobile_net(image, final_endpoint=None):
@@ -193,15 +98,7 @@ class MyNet:
 
         utils.get_model_data(MODEL_DIR, MODEL_URL)
 
-#       Create layers
-#       convo_1 = self.convolutional_layer(self.x, shape=[4,4,3,32])
-#       convo_1_pooling = self.max_pool_2by2(convo_1)
-
-#       convo_2 = self.convolutional_layer(convo_1_pooling,shape=[4,4,32,64])
-#       convo_2_pooling = self.max_pool_2by2(convo_2)
-
-        
-        
+#		transfer learning from MobilenetV1        
         mobilenet_net = self.get_mobile_net(self.x, final_endpoint="Conv2d_11")
         variable_to_restore = [v for v in slim.get_variables_to_restore() if v.name.split('/')[0] == 'MobilenetV1']
 #       shape of mobilenet_net: (?, 14, 14, 512)
@@ -221,7 +118,8 @@ class MyNet:
             print('fully conn network: ', full_feature)
             self.y_pred = self.normal_full_layer(full_feature, category_size)
         else:
-            self.y_pred = self.normal_full_layer(full_one_dropout, category_size)
+        	print('fully conn network: ', full_one_dropout)
+        	self.y_pred = self.normal_full_layer(full_one_dropout, category_size)
 #       y_pred = normal_full_layer(full_feature, len(part_list))
 
         self.sess = tf.Session()
@@ -336,21 +234,21 @@ def train(_feature_size):
     test_feature = np.array([])
     f_dataset = np.array([])
 
-    train_dataset, label_dataset = load_data(train_image_dir, part_dir_list=part_list)
-    test_dataset, test_label = load_data(test_image_dir, part_dir_list=part_list)
-    if _feature_size != 0:
-        feature_dataset = create_feature(train_image_dir, part_dir_list=part_list, feature_size=_feature_size)
-        test_feature = create_feature(test_image_dir, part_dir_list=part_list, feature_size=_feature_size)
+    train_dataset, label_dataset, feature_dataset = iLoader.load_data(train_image_dir, part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE, feature_size=_feature_size, feature_category=FEATURE_CLASS)
+    test_dataset, test_label, test_feature = iLoader.load_data(test_image_dir, part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE, feature_size=_feature_size, feature_category=FEATURE_CLASS)
+#    if _feature_size != 0:
+#        feature_dataset = iLoader.create_feature(train_image_dir, part_list=TEETH_PART_LIST, feature_size=_feature_size, feature_category=FEATURE_CLASS)
+#        test_feature = iLoader.create_feature(test_image_dir, part_list=TEETH_PART_LIST, feature_size=_feature_size, feature_category=FEATURE_CLASS)
 
     batch_size = 2
     index = 0
     accuracy_list = []
 
-    my_net = MyNet(image_size=IMAGE_SIZE, category_size=len(part_list), feature_size=_feature_size)
+    my_net = MyNet(image_size=IMAGE_SIZE, category_size=len(TEETH_PART_LIST), feature_size=_feature_size)
 
     for i in range(5000):
         x_dataset = train_dataset[index:index+batch_size].reshape(-1, IMAGE_SIZE, IMAGE_SIZE, 3)
-        y_dataset = label_dataset[index:index+batch_size].reshape(-1, len(part_list))
+        y_dataset = label_dataset[index:index+batch_size].reshape(-1, len(TEETH_PART_LIST))
         
         if _feature_size != 0:
             f_dataset = feature_dataset[index:index+batch_size].reshape(-1, _feature_size)
@@ -372,95 +270,25 @@ def train(_feature_size):
     return
 
 def predict(_feature_size):
-    predict_image_dir = 'Q8H/test_img/'
+    predict_image_dir = 'predict_img_all/'
     predict_feature = np.array([])
-    predict_dataset, predict_label = load_data(predict_image_dir, part_dir_list=part_list)
+    predict_dataset, predict_label, predict_file_name = iLoader.load_data_with_name(predict_image_dir, part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE)
 
     if _feature_size != 0:
-        predict_feature = create_feature(predict_image_dir, part_dir_list=part_list, feature_size=_feature_size)
+        predict_feature = create_feature(predict_image_dir, part_dir_list=TEETH_PART_LIST, feature_size=_feature_size)
 
-    my_net = MyNet(image_size=IMAGE_SIZE, category_size=len(part_list), feature_size=_feature_size, predict_ckpt='logs/model.ckpt-2500')
+    my_net = MyNet(image_size=IMAGE_SIZE, category_size=len(TEETH_PART_LIST), feature_size=_feature_size, predict_ckpt='logs/model.ckpt-2500')
 
     result = my_net.predict(predict_dataset, predict_feature)
 
-    plot_error_result(predict_dataset, result)
+    for i in range(len(result)):
+        if result[i] != np.argmax(predict_label[i]):
+            print('error: ', TEETH_PART_LIST[result[i]], '   ', predict_file_name[i])
+
+#    pu.plot_error_result(part_list, predict_dataset, result)
 
     return
 
-
-def plot_error_result(predict_dataset, result):
-    error_count = 0
-    error_list = []
-    for k in range(len(result)):
-        if result[k] != int(k/2):
-            error_count += 1
-            error_list.append(k)
-
-    num_col = 4
-    num_row = int(error_count/4) + 1
-    fig, axs = plt.subplots(num_row, num_col)
-    show_count = 0
-
-    for i in range(num_row):
-        for j in range(num_col):
-            index = error_list[show_count]
-            axs[i][j].imshow(predict_dataset[index])
-            title = part_list[result[index]] + '-->' + part_list[int(index/2)]
-            
-            axs[i][j].set_title(title)
-            axs[i][j].set_xticks(())
-            axs[i][j].set_yticks(())
-
-            show_count += 1
-            if show_count == error_count:
-                break
-    plt.show()
-
-    return
-
-def plot_predict_result(predict_dataset, result):
-    num_row = int(len(predict_dataset)/6)
-    num_col = 6
-    fig, axs = plt.subplots(num_row, num_col)
-
-    for i in range(num_row):
-        for j in range(num_col):
-            index = i*num_col + j
-            axs[i][j].imshow(predict_dataset[index])
-            title = '' + part_list[result[index]]
-            if result[index] != int(index/2):
-                title += "(X)"
-            
-            axs[i][j].set_title(title)
-            axs[i][j].set_xticks(())
-            axs[i][j].set_yticks(())
-    plt.show()
-
-    return
-
-def save_train_result(acc_list):
-    print('save_train_result')
-    x = array(np.arange(len(acc_list)))
-    y = array(acc_list)
-    plt.xlabel('training iterations (1/100)')
-    plt.ylabel('Accuracy')
-    plt.bar(x, y)
-    plt.savefig('accuracy.png')
-    plt.close()
-
-    plt.xlabel('Accuracy')
-    plt.ylabel('times')
-    plt.hist(acc_list)
-    plt.savefig('histogram.png')
-
-    return
-
-def test_dataset():
-    train_image_dir = 'train_img/'
-    feature_dataset = create_feature(train_image_dir, part_dir_list=part_list, feature_size=args.feature)
-
-    print(feature_dataset.shape)
-    return
 
 def test_confusion_matrix():
     matrix = tf.confusion_matrix([1,1,1], [1,2,4])
@@ -471,9 +299,6 @@ def test_confusion_matrix():
 
     return
 
-def test_save_train_result():
-    save_train_result([1,1,1,4,5,5,5,7,7,7,7,1])
-    return
 
 if __name__ == '__main__':
     if args.feature == None:
@@ -482,6 +307,7 @@ if __name__ == '__main__':
         _feature_size = args.feature
 
     if args.mode == None:
+        feature_data = iLoader.create_feature('predict_img_all', part_list=TEETH_PART_LIST, feature_size=5, feature_category=FEATURE_CLASS)
         print('please input mode with --mode')
     else:
         if args.mode == 'train':
