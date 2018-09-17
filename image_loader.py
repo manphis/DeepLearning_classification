@@ -23,7 +23,7 @@ def load_data(image_dir, part_list, image_size, feature_size, feature_category):
     image_list = []
     label_list = []
     feat_list = []
-    feat_array = np.linspace(0, 1, feature_category)
+    name_list = []
     
     dir = image_dir
         
@@ -39,6 +39,13 @@ def load_data(image_dir, part_list, image_size, feature_size, feature_category):
             print('File without part: ', file)
             continue
 
+        # test for only 'in' and 'out'
+        # for i in range(len(part_list)):
+        #     if part_list[i] in file_prefix:
+        #         k = i
+        # if k == -1:
+        #     print('category error!!!!!!!!!!!!!!!!!!!!')
+
         try:
             resized_img = load_img(os.path.join(dir, file), image_size)
         except OSError:
@@ -52,16 +59,20 @@ def load_data(image_dir, part_list, image_size, feature_size, feature_category):
 #            if len(imgs[k]) == 400:        # only use 400 imgs to reduce my memory load
 #                break
 
-        if feature_size != 0:
-            feature = create_feature(k, part_list, feature_size, feature_category)
-            feat_list.append(feature)
+        feature = create_feature(k, part_list, feature_size, feature_category)
+#        feature = create_feature_foreach(k, part_list, feature_size, feature_category)
+        feat_list.append(feature)
+
+        name_list.append(file)
 
     
     image_data = np.concatenate(image_list, axis=0)
     label_data = np.concatenate(label_list, axis=0)
     feat_data = np.concatenate(feat_list, axis=0)
+    name_data = np.array(name_list)
 
-    print(feat_data.shape)
+    print('feature shape = ', feat_data.shape)
+    print(feat_data)
     
     return image_data, label_data, feat_data
 
