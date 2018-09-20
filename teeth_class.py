@@ -14,6 +14,10 @@ import image_loader as iLoader
 IMAGE_SIZE = 224
 FEATURE_CLASS = 4
 
+train_image_dir = 'Q8H_mix/train_img/'
+test_image_dir = 'Q8H_mix/test_img/'
+batch_size = 2
+
 #part_list = ['in_down_left', 'in_down_right', 'in_down_center', 'in_up_left', 'in_up_right', 'in_up_center',
 #            'out_down_left', 'out_down_right', 'out_down_center', 'out_up_left', 'out_up_right', 'out_up_center']
 
@@ -229,8 +233,6 @@ class MyNet:
     
 
 def train(_feature_size):
-    train_image_dir = 'Q8H/train_img/'
-    test_image_dir = 'Q8H/test_img/'
     test_feature = np.array([])
     f_dataset = np.array([])
 
@@ -240,7 +242,9 @@ def train(_feature_size):
 #        feature_dataset = iLoader.create_feature(train_image_dir, part_list=TEETH_PART_LIST, feature_size=_feature_size, feature_category=FEATURE_CLASS)
 #        test_feature = iLoader.create_feature(test_image_dir, part_list=TEETH_PART_LIST, feature_size=_feature_size, feature_category=FEATURE_CLASS)
 
-    batch_size = 2
+    print('=====> train_dataset = ', train_dataset.shape)
+    print('=====> test_dataset = ', test_dataset.shape)
+
     index = 0
     accuracy_list = []
 
@@ -270,24 +274,41 @@ def train(_feature_size):
     return
 
 def predict(_feature_size):
-    predict_image_dir = 'predict_img_all/'
+    predict_image_dir = 'Q8H_mix/test_img/'
     predict_feature = np.array([])
-    predict_dataset, predict_label, predict_file_name = iLoader.load_data_with_name(predict_image_dir, part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE)
+    predict_dataset, predict_label, predict_feature, predict_file_name = iLoader.load_data_with_name(predict_image_dir, 
+    	part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE, feature_size=_feature_size, feature_category=FEATURE_CLASS)
 
-    if _feature_size != 0:
-        predict_feature = create_feature(predict_image_dir, part_dir_list=TEETH_PART_LIST, feature_size=_feature_size)
+    # if _feature_size != 0:
+    #     predict_feature = create_feature(predict_image_dir, part_dir_list=TEETH_PART_LIST, feature_size=_feature_size)
 
-    my_net = MyNet(image_size=IMAGE_SIZE, category_size=len(TEETH_PART_LIST), feature_size=_feature_size, predict_ckpt='logs/model.ckpt-2500')
+    my_net = MyNet(image_size=IMAGE_SIZE, category_size=len(TEETH_PART_LIST), feature_size=_feature_size, predict_ckpt='logs/model.ckpt-3500')
 
     result = my_net.predict(predict_dataset, predict_feature)
 
+    error_list = []
+    correct_list = []
+    index_list = []
     for i in range(len(result)):
         if result[i] != np.argmax(predict_label[i]):
             print('error: ', TEETH_PART_LIST[result[i]], '   ', predict_file_name[i])
+            error_list.append(TEETH_PART_LIST[result[i]])
+            correct_list.append(TEETH_PART_LIST[np.argmax(predict_label[i])])
+            index_list.append(i)
 
-#    pu.plot_error_result(part_list, predict_dataset, result)
+    pu.plot_error_result(error_list, correct_list, predict_dataset, index_list)
 
     return
+
+def print_params():
+	print('=====>')
+	print('training data DIR: ', train_image_dir)
+	print('testing data DIR: ', test_image_dir)
+	print('image size: ', IMAGE_SIZE)
+	print('training batch size: ', batch_size)
+
+	print('<=====')
+	return
 
 
 def test_confusion_matrix():
@@ -310,6 +331,7 @@ if __name__ == '__main__':
         feature_data = iLoader.create_feature('predict_img_all', part_list=TEETH_PART_LIST, feature_size=5, feature_category=FEATURE_CLASS)
         print('please input mode with --mode')
     else:
+        print_params()
         if args.mode == 'train':
             print('training...')
             train(_feature_size)
