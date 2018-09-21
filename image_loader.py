@@ -19,13 +19,13 @@ def load_img(path, image_size):
 
 
 def load_data(image_dir, part_list, image_size, feature_size, feature_category):
-    print('load_data: feature size = ', feature_size, ' category = ', feature_category)
+    print('=====> load_data: feature size = ', feature_size, ' category = ', feature_category)
 
     image_data, label_data, feat_data, name_data = load_data_with_name(image_dir, part_list, image_size, feature_size, feature_category)
 
 
-    print('feature shape = ', feat_data.shape)
-    print(feat_data)
+    print('=====> feature shape = ', feat_data.shape)
+#    print(feat_data)
     
     return image_data, label_data, feat_data
 
@@ -36,6 +36,9 @@ def load_data_with_name(image_dir, part_list, image_size, feature_size, feature_
     name_list = []
     
     dir = image_dir
+
+    if feature_size != 0:
+        print('=====> feature class: ', np.linspace(0, 1, feature_category))
         
     for file in os.listdir(dir):
         if not file.lower().endswith('.jpg'):
@@ -59,7 +62,10 @@ def load_data_with_name(image_dir, part_list, image_size, feature_size, feature_
         tag[0][k] = 1
         label_list.append(tag)
 
-        feature = create_feature(k, part_list, feature_size, feature_category)
+        if feature_category == 12:
+            feature = create_feature_foreach(k, part_list, feature_size, feature_category)
+        else:
+            feature = create_feature(k, part_list, feature_size, feature_category)
         feat_list.append(feature)
 
         name_list.append(file)
@@ -73,13 +79,13 @@ def load_data_with_name(image_dir, part_list, image_size, feature_size, feature_
 
 def create_feature(type, part_list, feature_size, feature_category):
     feat_array = np.linspace(0, 1, feature_category)
-
+    
     index = 0
     if type==0 or type==3 or type==7 or type==10:   #category 1
         index = 0
     elif type==2:
         index = 2
-    elif type==5:
+    elif type==5 or type==8 or type==11:
         index = 3
     else:
         index = 1

@@ -12,10 +12,11 @@ import image_loader as iLoader
 
 
 IMAGE_SIZE = 224
-FEATURE_CLASS = 4
+FEATURE_CLASS = 12
 
-train_image_dir = 'Q8H_mix/train_img/'
-test_image_dir = 'Q8H_mix/test_img/'
+train_image_dir = 'Q8H/train_img/'
+test_image_dir = 'Q8H/test_img/'
+predict_image_dir = 'Q8H/test_img/'
 batch_size = 2
 
 #part_list = ['in_down_left', 'in_down_right', 'in_down_center', 'in_up_left', 'in_up_right', 'in_up_center',
@@ -115,9 +116,8 @@ class MyNet:
         full_layer_one = tf.nn.relu(self.normal_full_layer(convo_2_flat, 1024))
         full_one_dropout = tf.nn.dropout(full_layer_one, keep_prob=self.hold_prob)
 
-        print("feature size = ", feature_size)
+        print("MyNet: feature size = ", feature_size)
         if feature_size != 0:
-            print('Add feature array!!!')
             full_feature = tf.concat( [full_one_dropout, self.x_feat], 1 )
             print('fully conn network: ', full_feature)
             self.y_pred = self.normal_full_layer(full_feature, category_size)
@@ -274,7 +274,6 @@ def train(_feature_size):
     return
 
 def predict(_feature_size):
-    predict_image_dir = 'Q8H_mix/test_img/'
     predict_feature = np.array([])
     predict_dataset, predict_label, predict_feature, predict_file_name = iLoader.load_data_with_name(predict_image_dir, 
     	part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE, feature_size=_feature_size, feature_category=FEATURE_CLASS)
@@ -282,7 +281,7 @@ def predict(_feature_size):
     # if _feature_size != 0:
     #     predict_feature = create_feature(predict_image_dir, part_dir_list=TEETH_PART_LIST, feature_size=_feature_size)
 
-    my_net = MyNet(image_size=IMAGE_SIZE, category_size=len(TEETH_PART_LIST), feature_size=_feature_size, predict_ckpt='logs/model.ckpt-3500')
+    my_net = MyNet(image_size=IMAGE_SIZE, category_size=len(TEETH_PART_LIST), feature_size=_feature_size, predict_ckpt='logs/model.ckpt-4400')
 
     result = my_net.predict(predict_dataset, predict_feature)
 
@@ -304,7 +303,9 @@ def print_params():
 	print('=====>')
 	print('training data DIR: ', train_image_dir)
 	print('testing data DIR: ', test_image_dir)
+	print('predicting data DIR: ', predict_image_dir)
 	print('image size: ', IMAGE_SIZE)
+	print('feature class: ', FEATURE_CLASS)
 	print('training batch size: ', batch_size)
 
 	print('<=====')
