@@ -2,6 +2,7 @@ import os
 import numpy as np
 import skimage.io
 import skimage.transform
+from itertools import cycle, islice
 
 def load_img(path, image_size):
     img = skimage.io.imread(path)
@@ -16,6 +17,65 @@ def load_img(path, image_size):
     resized_img = skimage.transform.resize(crop_img, (image_size, image_size))[None, :, :, :]   # shape [1, 224, 224, 3]
 #    resized_img = skimage.transform.resize(crop_img, (32, 32))[None, :, :, :]   # shape [1, 32, 32, 3]
     return resized_img
+
+def load_file_name(image_dir):
+    name_list = [f for f in os.listdir(image_dir) if f.lower().endswith('.jpg')]
+
+    return name_list
+
+def circular_sample(lst, start_index, length):
+    aux = islice(cycle(lst), start_index, start_index+length)
+
+    return list(aux)
+
+def load_data_by_name(image_dir, file_list, part_list, image_size, feature_size, feature_category):
+    image_list = []
+    label_list = []
+    feat_list = []
+    name_list = []
+    
+    dir = image_dir
+
+    if feature_size != 0:
+        print('=====> feature class: ', np.linspace(0, 1, feature_category))
+        
+    for file in file_list:
+#        print('file: ', os.path.join(dir, file))
+        if not file.lower().endswith('.jpg'):
+            continue
+
+        file_prefix, rest = file.split("_", 1)
+        k = -1
+        try:
+            k = part_list.index(file_prefix)
+        except ValueError:
+            print('File without part: ', file)
+            continue
+
+        try:
+            resized_img = load_img(os.path.join(dir, file), image_size)
+        except OSError:
+            continue
+        image_list.append(resized_img)    # [1, height, width, depth] * n
+        
+        tag = np.zeros((1, len(part_list)))
+        tag[0][k] = 1
+        label_list.append(tag)
+
+        if feature_category == 12:
+            feature = create_feature_foreach(k, part_list, feature_size, feature_category)
+        else:
+            feature = create_feature(k, part_list, feature_size, feature_category)
+        feat_list.append(feature)
+
+        name_list.append(file)
+    
+    image_data = np.concatenate(image_list, axis=0)
+    label_data = np.concatenate(label_list, axis=0)
+    feat_data = np.concatenate(feat_list, axis=0)
+    name_data = np.array(name_list)
+    
+    return image_data, label_data, feat_data, name_data
 
 
 def load_data(image_dir, part_list, image_size, feature_size, feature_category):
