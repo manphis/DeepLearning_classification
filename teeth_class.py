@@ -16,7 +16,7 @@ FEATURE_CLASS = 12
 
 train_image_dir = 'Q8H_mix/train_img/'
 test_image_dir = 'Q8H_mix/test_img/'
-predict_image_dir = 'Q8H_mix/test_img/'
+predict_image_dir = 'image_data/000000000038/Q8H_mix_test/'
 batch_size = 2
 
 #part_list = ['in_down_left', 'in_down_right', 'in_down_center', 'in_up_left', 'in_up_right', 'in_up_center',
@@ -53,6 +53,7 @@ _CONV_DEFS = [
 parser = argparse.ArgumentParser()
 parser.add_argument("--feature", help="input the size of feature", type=int)
 parser.add_argument("--mode", help="input mode: train or predict", type=str)
+parser.add_argument("--checkpoint", help="input checkpoint number for prediction", type=int)
 args = parser.parse_args()
 print (args.feature)
 
@@ -295,7 +296,7 @@ def train(_feature_size):
     print(accuracy_list)
     return
 
-def predict(_feature_size):
+def predict(_feature_size, ckpt_num=4000):
     predict_feature = np.array([])
     predict_dataset, predict_label, predict_feature, predict_file_name = iLoader.load_data_with_name(predict_image_dir, 
     	part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE, feature_size=_feature_size, feature_category=FEATURE_CLASS)
@@ -304,7 +305,8 @@ def predict(_feature_size):
     # if _feature_size != 0:
     #     predict_feature = create_feature(predict_image_dir, part_dir_list=TEETH_PART_LIST, feature_size=_feature_size)
 
-    my_net = MyNet(image_size=IMAGE_SIZE, category_size=len(TEETH_PART_LIST), feature_size=_feature_size, predict_ckpt='logs/model.ckpt-4300')
+    ckpt_file = 'logs/model.ckpt-' + str(ckpt_num)
+    my_net = MyNet(image_size=IMAGE_SIZE, category_size=len(TEETH_PART_LIST), feature_size=_feature_size, predict_ckpt=ckpt_file)
 
     result = my_net.predict(predict_dataset, predict_feature)
 
@@ -388,6 +390,9 @@ if __name__ == '__main__':
             train(_feature_size)
         elif args.mode == 'predict':
             print('predicting...')
-            predict(_feature_size)
+            if args.checkpoint == None:
+                predict(_feature_size)
+            else:
+                predict(_feature_size, args.checkpoint)
         else:
             print('please use -h to know how to use --mode')
