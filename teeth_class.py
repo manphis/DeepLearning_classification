@@ -14,9 +14,9 @@ import image_loader as iLoader
 IMAGE_SIZE = 224
 FEATURE_CLASS = 12
 
-train_image_dir = 'Q8H_mix/train_img/'
-test_image_dir = 'Q8H_mix/test_img/'
-predict_image_dir = 'image_data/000000000038/Q8H_mix_test/'
+train_image_dir = 'image_data/000000000038/self_train_img/'
+test_image_dir = 'image_data/000000000038/test_img/'
+predict_image_dir = 'image_data/000000000038/test_img/'
 batch_size = 2
 
 #part_list = ['in_down_left', 'in_down_right', 'in_down_center', 'in_up_left', 'in_up_right', 'in_up_center',
@@ -237,17 +237,18 @@ def train(_feature_size):
     test_feature = np.array([])
     f_dataset = np.array([])
 
-#    train_dataset, label_dataset, feature_dataset = iLoader.load_data(train_image_dir, part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE, feature_size=_feature_size, feature_category=FEATURE_CLASS)
-#    test_dataset, test_label, test_feature = iLoader.load_data(test_image_dir, part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE, feature_size=_feature_size, feature_category=FEATURE_CLASS)
+    train_dataset, label_dataset, feature_dataset = iLoader.load_data(train_image_dir, part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE, feature_size=_feature_size, feature_category=FEATURE_CLASS)
+    print("=====> train dataset shape = ", train_dataset.shape)
+    test_dataset, test_label, test_feature = iLoader.load_data(test_image_dir, part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE, feature_size=_feature_size, feature_category=FEATURE_CLASS)
 
-    filename_list = iLoader.load_file_name(train_image_dir)
-    print('=====> total train data length = ', len(filename_list))
-    print('=====> filename_list = ', filename_list)
-    test_filename_list = iLoader.load_file_name(test_image_dir)
-#    partial_test_list = iLoader.circular_sample(test_filename_list, 0, 50)
-    partial_test_list = np.array(test_filename_list)[np.random.choice(len(test_filename_list), 50, replace=False)]
-    test_dataset, test_label, test_feature, test_name = iLoader.load_data_by_name(test_image_dir, file_list=partial_test_list,
-                part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE, feature_size=_feature_size, feature_category=FEATURE_CLASS)
+#     filename_list = iLoader.load_file_name(train_image_dir)
+#     print('=====> total train data length = ', len(filename_list))
+#     print('=====> filename_list = ', filename_list)
+#     test_filename_list = iLoader.load_file_name(test_image_dir)
+# #    partial_test_list = iLoader.circular_sample(test_filename_list, 0, 50)
+#     partial_test_list = np.array(test_filename_list)[np.random.choice(len(test_filename_list), 50, replace=False)]
+#     test_dataset, test_label, test_feature, test_name = iLoader.load_data_by_name(test_image_dir, file_list=partial_test_list,
+#                 part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE, feature_size=_feature_size, feature_category=FEATURE_CLASS)
 
 #    if _feature_size != 0:
 #        feature_dataset = iLoader.create_feature(train_image_dir, part_list=TEETH_PART_LIST, feature_size=_feature_size, feature_category=FEATURE_CLASS)
@@ -264,14 +265,14 @@ def train(_feature_size):
     file_index = 0
 
     for i in range(5000):
-        if i%100 == 0:
-            index = 0
-            partial_filename_list = iLoader.circular_sample(filename_list, file_index, file_batch_size)
-            print('=====> train index ', file_index, ' to ', file_index+file_batch_size) 
-            file_index += file_batch_size
-            train_dataset, label_dataset, feature_dataset, name_dataset = iLoader.load_data_by_name(train_image_dir, file_list=partial_filename_list,
-                part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE, feature_size=_feature_size, feature_category=FEATURE_CLASS)
-            print('=====> train from ', name_dataset[0], ' to ', name_dataset[len(name_dataset)-1])
+        # if i%100 == 0:
+        #     index = 0
+        #     partial_filename_list = iLoader.circular_sample(filename_list, file_index, file_batch_size)
+        #     print('=====> train index ', file_index, ' to ', file_index+file_batch_size) 
+        #     file_index += file_batch_size
+        #     train_dataset, label_dataset, feature_dataset, name_dataset = iLoader.load_data_by_name(train_image_dir, file_list=partial_filename_list,
+        #         part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE, feature_size=_feature_size, feature_category=FEATURE_CLASS)
+        #     print('=====> train from ', name_dataset[0], ' to ', name_dataset[len(name_dataset)-1])
 
 
         x_dataset = train_dataset[index:index+batch_size].reshape(-1, IMAGE_SIZE, IMAGE_SIZE, 3)
