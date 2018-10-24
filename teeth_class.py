@@ -16,7 +16,7 @@ FEATURE_CLASS = 12
 
 train_image_dir = 'image_data/000000000038/self_train_img/'
 test_image_dir = 'image_data/000000000038/test_img/'
-predict_image_dir = 'image_data/000000000038/test_img/'
+predict_image_dir = 'map_test_img2/'
 batch_size = 2
 
 #part_list = ['in_down_left', 'in_down_right', 'in_down_center', 'in_up_left', 'in_up_right', 'in_up_center',
@@ -112,20 +112,33 @@ class MyNet:
 #       self.size = (int)(image_size/4)
 #       convo_2_flat = tf.reshape(convo_2_pooling, [-1, self.size*self.size*64])
         self.size = 14*14*512
-        convo_2_flat = tf.reshape(mobilenet_net, [-1, self.size])
 
-        full_layer_one = tf.nn.relu(self.normal_full_layer(convo_2_flat, 1024))
-        full_one_dropout = tf.nn.dropout(full_layer_one, keep_prob=self.hold_prob)
+        # GAP layer
+        self.gap_weight = tf.Variable(tf.random_normal([512, len(TEETH_PART_LIST)]))
+        self.gap_bias = tf.Variable(tf.random_normal([len(TEETH_PART_LIST)]))
+        self.y_pred = self.gap_out_layer(mobilenet_net, self.gap_weight, self.gap_bias)
 
-        print("MyNet: feature size = ", feature_size)
-        if feature_size != 0:
-            full_feature = tf.concat( [full_one_dropout, self.x_feat], 1 )
-            print('fully conn network: ', full_feature)
-            self.y_pred = self.normal_full_layer(full_feature, category_size)
-        else:
-        	print('fully conn network: ', full_one_dropout)
-        	self.y_pred = self.normal_full_layer(full_one_dropout, category_size)
-#       y_pred = normal_full_layer(full_feature, len(part_list))
+
+
+
+
+
+
+
+#         convo_2_flat = tf.reshape(mobilenet_net, [-1, self.size])
+
+#         full_layer_one = tf.nn.relu(self.normal_full_layer(convo_2_flat, 1024))
+#         full_one_dropout = tf.nn.dropout(full_layer_one, keep_prob=self.hold_prob)
+
+#         print("MyNet: feature size = ", feature_size)
+#         if feature_size != 0:
+#             full_feature = tf.concat( [full_one_dropout, self.x_feat], 1 )
+#             print('fully conn network: ', full_feature)
+#             self.y_pred = self.normal_full_layer(full_feature, category_size)
+#         else:
+#         	print('fully conn network: ', full_one_dropout)
+#         	self.y_pred = self.normal_full_layer(full_one_dropout, category_size)
+# #       y_pred = normal_full_layer(full_feature, len(part_list))
 
         self.sess = tf.Session()
 
@@ -135,6 +148,11 @@ class MyNet:
             self.saver.restore(self.sess, predict_ckpt)
 
             self.position = tf.argmax(self.y_pred,1)
+
+            self.classmaps = self.generate_heatmap(mobilenet_net, self.position, self.gap_weight, IMAGE_SIZE)
+
+
+
         else:
             self.cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.y_true,logits=self.y_pred))
             self.optimizer = tf.train.AdamOptimizer(learning_rate=LEARNING_RATE)
@@ -231,6 +249,33 @@ class MyNet:
         print('predict index = ', idx)
         return idx
 
+    def activation_map(self, predict_dataset, predict_feature):
+        print('num for activation_map = ', len(predict_dataset))
+#        for i in range(len(predict_dataset)):
+        if self.feature_size != 0:
+            maps = self.sess.run(self.classmaps, feed_dict={self.x:predict_dataset, self.x_feat:predict_feature, self.hold_prob:1.0})
+        else:
+            maps = self.sess.run(self.classmaps, feed_dict={self.x:predict_dataset, self.hold_prob:1.0})
+
+        return maps
+
+    def gap_out_layer(self, conv, weight, biase):
+        gap = tf.nn.avg_pool(conv, ksize=[1,14,14,1], strides=[1,14,14,1], padding="SAME")
+        gap = tf.reshape(gap,[-1, 512])
+        out = tf.add(tf.matmul(gap, weight), biase)
+
+        return out
+
+    def generate_heatmap(self, conv, label, weight, size):
+        conv2_resized = tf.image.resize_images(conv, [size,size])
+        label_w = tf.gather(tf.transpose(weight), label)
+        label_w = tf.reshape(label_w, [-1,512,1])
+        conv2_resized = tf.reshape(conv2_resized,[-1, size*size, 512])
+        classmap = tf.matmul( conv2_resized, label_w )
+        classmap = tf.reshape( classmap, [-1, size,size] )
+        
+        return classmap
+
     
 
 def train(_feature_size):
@@ -311,6 +356,8 @@ def predict(_feature_size, ckpt_num=4000):
 
     result = my_net.predict(predict_dataset, predict_feature)
 
+    maps = my_net.activation_map(predict_dataset, predict_feature)
+
     error_list = []
     correct_list = []
     index_list = []
@@ -322,6 +369,8 @@ def predict(_feature_size, ckpt_num=4000):
             index_list.append(i)
 
 #    pu.plot_error_result(error_list, correct_list, predict_dataset, index_list)
+
+    pu.plot_classmap(predict_dataset, maps)
 
     return
 

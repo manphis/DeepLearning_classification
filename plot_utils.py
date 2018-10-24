@@ -53,6 +53,38 @@ def plot_error_result(error_list, correct_list, predict_dataset, index_list):
     plt.show()
     return
 
+def plot_classmap(predict_dataset, maps):
+    num_col = 4
+    num_row = int(len(maps)/num_col) if int(len(maps)%num_col)==0 else int(len(maps)/num_col)+1
+
+    print('num_row = ', num_row)
+
+    fig, axs = plt.subplots(num_row, num_col)
+    show_count = 0
+
+    done = False
+
+    for i in range(num_row):
+        for j in range(num_col):
+            index = i * num_col + j
+            axs[i][j].imshow(predict_dataset[index])
+            axs[i][j].imshow(maps[index], cmap="jet", alpha=0.7)
+            # title = error_list[show_count] + '-->' + correct_list[show_count]
+            
+            # axs[i][j].set_title(title)
+            axs[i][j].set_xticks(())
+            axs[i][j].set_yticks(())
+
+            show_count += 1
+            if show_count == len(maps):
+                done = True
+                break
+        if done:
+            break
+    plt.show()
+    return
+
+
 # def plot_error_result(part_list, predict_dataset, result):
 #     error_count = 0
 #     error_list = []
