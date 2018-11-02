@@ -14,8 +14,8 @@ import image_loader as iLoader
 IMAGE_SIZE = 224
 FEATURE_CLASS = 12
 
-train_image_dir = 'image_data/101090840001/Q8H_mix_face/self_train_img/'
-test_image_dir = 'image_data/101090840001/Q8H_mix_face/test_img/'
+train_image_dir = 'Q8H/train_img/'
+test_image_dir = 'Q8H/test_img/'
 predict_image_dir = 'face_detection/138839393939mix_face_map/'
 batch_size = 2
 
@@ -123,18 +123,18 @@ class MyNet:
         else:
             convo_2_flat = tf.reshape(mobilenet_net, [-1, self.size])
 
+            print("MyNet: feature size = ", feature_size)
+
+            if feature_size != 0:
+                convo_2_flat = tf.concat( [convo_2_flat, self.x_feat], 1 )
+
+            print("MyNet: convo_2_flat shape = ", convo_2_flat.shape)
+
             full_layer_one = tf.nn.relu(self.normal_full_layer(convo_2_flat, 1024))
             full_one_dropout = tf.nn.dropout(full_layer_one, keep_prob=self.hold_prob)
 
-            print("MyNet: feature size = ", feature_size)
-            if feature_size != 0:
-                full_feature = tf.concat( [full_one_dropout, self.x_feat], 1 )
-                print('fully conn network: ', full_feature)
-                self.y_pred = self.normal_full_layer(full_feature, category_size)
-            else:
-            	print('fully conn network: ', full_one_dropout)
-            	self.y_pred = self.normal_full_layer(full_one_dropout, category_size)
-    #       y_pred = normal_full_layer(full_feature, len(part_list))
+            self.y_pred = self.normal_full_layer(full_one_dropout, category_size)
+
 
         self.sess = tf.Session()
 
@@ -146,8 +146,6 @@ class MyNet:
             self.position = tf.argmax(self.y_pred,1)
 
             self.classmaps = self.generate_heatmap(mobilenet_net, self.position, self.gap_weight, IMAGE_SIZE)
-
-
 
         else:
             self.cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.y_true,logits=self.y_pred))
@@ -284,8 +282,6 @@ def train(_feature_size):
     BATCH_LOAD = True if len(filename_list) > 200 else False
 
     if BATCH_LOAD:
-        
-#        print('=====> filename_list = ', filename_list)
         test_filename_list = iLoader.load_file_name(test_image_dir)
     #    partial_test_list = iLoader.circular_sample(test_filename_list, 0, 50)
         partial_test_list = np.array(test_filename_list)[np.random.choice(len(test_filename_list), 50, replace=False)]
