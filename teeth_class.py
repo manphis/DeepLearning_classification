@@ -14,9 +14,9 @@ import image_loader as iLoader
 IMAGE_SIZE = 224
 FEATURE_CLASS = 12
 
-train_image_dir = 'image_data/000000000038/self_train_img/'
-test_image_dir = 'image_data/000000000038/test_img/'
-predict_image_dir = 'map_test_img2/'
+train_image_dir = 'image_data/101090840001/Q8H_mix_face/self_train_img/'
+test_image_dir = 'image_data/101090840001/Q8H_mix_face/test_img/'
+predict_image_dir = 'face_detection/138839393939mix_face_map/'
 batch_size = 2
 
 #part_list = ['in_down_left', 'in_down_right', 'in_down_center', 'in_up_left', 'in_up_right', 'in_up_center',
@@ -93,7 +93,7 @@ def mobile_net(image, final_endpoint=None):
 
 
 class MyNet:
-    def __init__(self, image_size, category_size, feature_size=0, predict_ckpt=None):
+    def __init__(self, image_size, category_size, feature_size=0, predict_ckpt=None, gap_layer=False):
         self.x = tf.placeholder(tf.float32,shape=[None, image_size, image_size, 3])
         self.y_true = tf.placeholder(tf.float32,shape=[None, category_size])
         if feature_size != 0:
@@ -113,32 +113,28 @@ class MyNet:
 #       convo_2_flat = tf.reshape(convo_2_pooling, [-1, self.size*self.size*64])
         self.size = 14*14*512
 
-        # GAP layer
-        self.gap_weight = tf.Variable(tf.random_normal([512, len(TEETH_PART_LIST)]))
-        self.gap_bias = tf.Variable(tf.random_normal([len(TEETH_PART_LIST)]))
-        self.y_pred = self.gap_out_layer(mobilenet_net, self.gap_weight, self.gap_bias)
+        print("MyNet: gap = ", gap_layer)
 
+        if gap_layer:
+            # GAP layer
+            self.gap_weight = tf.Variable(tf.random_normal([512, len(TEETH_PART_LIST)]))
+            self.gap_bias = tf.Variable(tf.random_normal([len(TEETH_PART_LIST)]))
+            self.y_pred = self.gap_out_layer(mobilenet_net, self.gap_weight, self.gap_bias)
+        else:
+            convo_2_flat = tf.reshape(mobilenet_net, [-1, self.size])
 
+            full_layer_one = tf.nn.relu(self.normal_full_layer(convo_2_flat, 1024))
+            full_one_dropout = tf.nn.dropout(full_layer_one, keep_prob=self.hold_prob)
 
-
-
-
-
-
-#         convo_2_flat = tf.reshape(mobilenet_net, [-1, self.size])
-
-#         full_layer_one = tf.nn.relu(self.normal_full_layer(convo_2_flat, 1024))
-#         full_one_dropout = tf.nn.dropout(full_layer_one, keep_prob=self.hold_prob)
-
-#         print("MyNet: feature size = ", feature_size)
-#         if feature_size != 0:
-#             full_feature = tf.concat( [full_one_dropout, self.x_feat], 1 )
-#             print('fully conn network: ', full_feature)
-#             self.y_pred = self.normal_full_layer(full_feature, category_size)
-#         else:
-#         	print('fully conn network: ', full_one_dropout)
-#         	self.y_pred = self.normal_full_layer(full_one_dropout, category_size)
-# #       y_pred = normal_full_layer(full_feature, len(part_list))
+            print("MyNet: feature size = ", feature_size)
+            if feature_size != 0:
+                full_feature = tf.concat( [full_one_dropout, self.x_feat], 1 )
+                print('fully conn network: ', full_feature)
+                self.y_pred = self.normal_full_layer(full_feature, category_size)
+            else:
+            	print('fully conn network: ', full_one_dropout)
+            	self.y_pred = self.normal_full_layer(full_one_dropout, category_size)
+    #       y_pred = normal_full_layer(full_feature, len(part_list))
 
         self.sess = tf.Session()
 
@@ -282,22 +278,23 @@ def train(_feature_size):
     test_feature = np.array([])
     f_dataset = np.array([])
 
-    train_dataset, label_dataset, feature_dataset = iLoader.load_data(train_image_dir, part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE, feature_size=_feature_size, feature_category=FEATURE_CLASS)
-    print("=====> train dataset shape = ", train_dataset.shape)
-    test_dataset, test_label, test_feature = iLoader.load_data(test_image_dir, part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE, feature_size=_feature_size, feature_category=FEATURE_CLASS)
+    filename_list = iLoader.load_file_name(train_image_dir)
+    print('=====> total train data length = ', len(filename_list))
+    
+    BATCH_LOAD = True if len(filename_list) > 200 else False
 
-#     filename_list = iLoader.load_file_name(train_image_dir)
-#     print('=====> total train data length = ', len(filename_list))
-#     print('=====> filename_list = ', filename_list)
-#     test_filename_list = iLoader.load_file_name(test_image_dir)
-# #    partial_test_list = iLoader.circular_sample(test_filename_list, 0, 50)
-#     partial_test_list = np.array(test_filename_list)[np.random.choice(len(test_filename_list), 50, replace=False)]
-#     test_dataset, test_label, test_feature, test_name = iLoader.load_data_by_name(test_image_dir, file_list=partial_test_list,
-#                 part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE, feature_size=_feature_size, feature_category=FEATURE_CLASS)
-
-#    if _feature_size != 0:
-#        feature_dataset = iLoader.create_feature(train_image_dir, part_list=TEETH_PART_LIST, feature_size=_feature_size, feature_category=FEATURE_CLASS)
-#        test_feature = iLoader.create_feature(test_image_dir, part_list=TEETH_PART_LIST, feature_size=_feature_size, feature_category=FEATURE_CLASS)
+    if BATCH_LOAD:
+        
+#        print('=====> filename_list = ', filename_list)
+        test_filename_list = iLoader.load_file_name(test_image_dir)
+    #    partial_test_list = iLoader.circular_sample(test_filename_list, 0, 50)
+        partial_test_list = np.array(test_filename_list)[np.random.choice(len(test_filename_list), 50, replace=False)]
+        test_dataset, test_label, test_feature, test_name = iLoader.load_data_by_name(test_image_dir, file_list=partial_test_list,
+                    part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE, feature_size=_feature_size, feature_category=FEATURE_CLASS)
+    else:
+        train_dataset, label_dataset, feature_dataset = iLoader.load_data(train_image_dir, part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE, feature_size=_feature_size, feature_category=FEATURE_CLASS)
+        print("=====> train dataset shape = ", train_dataset.shape)
+        test_dataset, test_label, test_feature = iLoader.load_data(test_image_dir, part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE, feature_size=_feature_size, feature_category=FEATURE_CLASS)
 
     print('=====> test_dataset = ', test_dataset.shape)
 
@@ -310,14 +307,15 @@ def train(_feature_size):
     file_index = 0
 
     for i in range(5000):
-        # if i%100 == 0:
-        #     index = 0
-        #     partial_filename_list = iLoader.circular_sample(filename_list, file_index, file_batch_size)
-        #     print('=====> train index ', file_index, ' to ', file_index+file_batch_size) 
-        #     file_index += file_batch_size
-        #     train_dataset, label_dataset, feature_dataset, name_dataset = iLoader.load_data_by_name(train_image_dir, file_list=partial_filename_list,
-        #         part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE, feature_size=_feature_size, feature_category=FEATURE_CLASS)
-        #     print('=====> train from ', name_dataset[0], ' to ', name_dataset[len(name_dataset)-1])
+        if BATCH_LOAD:
+            if i%100 == 0:
+                index = 0
+                partial_filename_list = iLoader.circular_sample(filename_list, file_index, file_batch_size)
+                print('=====> train index ', file_index, ' to ', file_index+file_batch_size) 
+                file_index += file_batch_size
+                train_dataset, label_dataset, feature_dataset, name_dataset = iLoader.load_data_by_name(train_image_dir, file_list=partial_filename_list,
+                    part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE, feature_size=_feature_size, feature_category=FEATURE_CLASS)
+                print('=====> train from ', name_dataset[0], ' to ', name_dataset[len(name_dataset)-1])
 
 
         x_dataset = train_dataset[index:index+batch_size].reshape(-1, IMAGE_SIZE, IMAGE_SIZE, 3)
@@ -352,7 +350,7 @@ def predict(_feature_size, ckpt_num=4000):
     #     predict_feature = create_feature(predict_image_dir, part_dir_list=TEETH_PART_LIST, feature_size=_feature_size)
 
     ckpt_file = 'logs/model.ckpt-' + str(ckpt_num)
-    my_net = MyNet(image_size=IMAGE_SIZE, category_size=len(TEETH_PART_LIST), feature_size=_feature_size, predict_ckpt=ckpt_file)
+    my_net = MyNet(image_size=IMAGE_SIZE, category_size=len(TEETH_PART_LIST), feature_size=_feature_size, predict_ckpt=ckpt_file, gap_layer=True)
 
     result = my_net.predict(predict_dataset, predict_feature)
 

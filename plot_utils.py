@@ -68,7 +68,7 @@ def plot_classmap(predict_dataset, maps):
         for j in range(num_col):
             index = i * num_col + j
             axs[i][j].imshow(predict_dataset[index])
-            axs[i][j].imshow(maps[index], cmap="jet", alpha=0.7)
+            axs[i][j].imshow(maps[index], cmap="jet", alpha=0.4)
             # title = error_list[show_count] + '-->' + correct_list[show_count]
             
             # axs[i][j].set_title(title)
