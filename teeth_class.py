@@ -14,10 +14,11 @@ import image_loader as iLoader
 IMAGE_SIZE = 224
 FEATURE_CLASS = 12
 
-train_image_dir = 'Q8H/train_img/'
-test_image_dir = 'Q8H/test_img/'
+train_image_dir = 'image_data/101090840001/Q8H_mix_face/self_train_img/'
+test_image_dir = 'image_data/101090840001/Q8H_mix_face/test_img/'
 predict_image_dir = 'face_detection/138839393939mix_face_map/'
 batch_size = 2
+pretrain_ckpt = None
 
 #part_list = ['in_down_left', 'in_down_right', 'in_down_center', 'in_up_left', 'in_up_right', 'in_up_center',
 #            'out_down_left', 'out_down_right', 'out_down_center', 'out_up_left', 'out_up_right', 'out_up_center']
@@ -52,7 +53,7 @@ _CONV_DEFS = [
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--feature", help="input the size of feature", type=int)
-parser.add_argument("--mode", help="input mode: train or predict", type=str)
+parser.add_argument("--mode", help="input mode: train, predict, train-with-pretrain", type=str)
 parser.add_argument("--checkpoint", help="input checkpoint number for prediction", type=int)
 args = parser.parse_args()
 print (args.feature)
@@ -113,7 +114,7 @@ class MyNet:
 #       convo_2_flat = tf.reshape(convo_2_pooling, [-1, self.size*self.size*64])
         self.size = 14*14*512
 
-        print("MyNet: gap = ", gap_layer)
+        print("=====> MyNet: gap = ", gap_layer)
 
         if gap_layer:
             # GAP layer
@@ -123,12 +124,12 @@ class MyNet:
         else:
             convo_2_flat = tf.reshape(mobilenet_net, [-1, self.size])
 
-            print("MyNet: feature size = ", feature_size)
+            print("=====> MyNet: feature size = ", feature_size)
 
             if feature_size != 0:
                 convo_2_flat = tf.concat( [convo_2_flat, self.x_feat], 1 )
 
-            print("MyNet: convo_2_flat shape = ", convo_2_flat.shape)
+            print("=====> MyNet: convo_2_flat shape = ", convo_2_flat.shape)
 
             full_layer_one = tf.nn.relu(self.normal_full_layer(convo_2_flat, 1024))
             full_one_dropout = tf.nn.dropout(full_layer_one, keep_prob=self.hold_prob)
@@ -139,7 +140,7 @@ class MyNet:
         self.sess = tf.Session()
 
         if predict_ckpt:
-            print('predict_ckpt = ', predict_ckpt)
+            print('=====> predict_ckpt = ', predict_ckpt)
             self.saver = tf.train.Saver()
             self.saver.restore(self.sess, predict_ckpt)
 
@@ -160,10 +161,15 @@ class MyNet:
             self.sess.run(tf.global_variables_initializer())
 
     #       restore pre-train mobilenet
-            self.saver = tf.train.Saver(variable_to_restore)
-            self.saver.restore(self.sess, 'Model_zoo/mobilenet_v1_1.0_224.ckpt')
+            if pretrain_ckpt == None:
+                self.saver = tf.train.Saver(variable_to_restore)
+                self.saver.restore(self.sess, 'Model_zoo/mobilenet_v1_1.0_224.ckpt')
+            else:
+                print('=====> load pretrain model: ', 'pretrain_model/model.ckpt-'+str(pretrain_ckpt))
+                self.saver = tf.train.Saver()
+                self.saver.restore(self.sess, 'pretrain_model/model.ckpt-'+str(pretrain_ckpt))
 
-        print("build MyNet done")
+        print("=====> build MyNet done")
 
         return
 
@@ -171,9 +177,9 @@ class MyNet:
     def train(self, x_dataset, y_dataset, f_dataset):
 #       print("x_shape: ", x_dataset.shape, "y_shape: ", y_dataset.shape, "f_shape: ", f_dataset.shape)
         if self.feature_size != 0:
-            loss, _ = self.sess.run([self.cross_entropy, self.train_op], feed_dict={self.x: x_dataset, self.y_true: y_dataset, self.x_feat: f_dataset, self.hold_prob: 0.5})
+            loss, _ = self.sess.run([self.cross_entropy, self.train_op], feed_dict={self.x: x_dataset, self.y_true: y_dataset, self.x_feat: f_dataset, self.hold_prob: 0.75})
         else:
-            loss, _ = self.sess.run([self.cross_entropy, self.train_op], feed_dict={self.x: x_dataset, self.y_true: y_dataset, self.hold_prob: 0.5})
+            loss, _ = self.sess.run([self.cross_entropy, self.train_op], feed_dict={self.x: x_dataset, self.y_true: y_dataset, self.hold_prob: 0.75})
 
         return loss
 
@@ -432,6 +438,10 @@ if __name__ == '__main__':
         if args.mode == 'train':
             print('training...')
             train(_feature_size)
+        elif args.mode == 'train-with-pretrain':
+            pretrain_ckpt = args.checkpoint
+            train(_feature_size)
+
         elif args.mode == 'predict':
             print('predicting...')
             if args.checkpoint == None:
