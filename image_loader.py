@@ -23,28 +23,37 @@ def load_file_name(image_dir):
 
     return name_list
 
+def load_file_from_dir_list(dir_list):
+    name_list = []
+    for i in range(len(dir_list)):
+        name_list += [str(dir_list[i]+f) for f in os.listdir(dir_list[i]) if f.lower().endswith('.jpg')]
+
+    return name_list
+
 def circular_sample(lst, start_index, length):
     aux = islice(cycle(lst), start_index, start_index+length)
 
     return list(aux)
 
-def load_data_by_name(image_dir, file_list, part_list, image_size, feature_size, feature_category):
+def load_data_by_fullname(file_list, part_list, image_size, feature_size, feature_category):
     image_list = []
     label_list = []
     feat_list = []
     name_list = []
-    
-    dir = image_dir
 
     if feature_size != 0:
         print('=====> feature class: ', np.linspace(0, 1, feature_category))
         
     for file in file_list:
-#        print('file: ', os.path.join(dir, file))
-        if not file.lower().endswith('.jpg'):
+        # print('file: ', file)
+        file_items = file.split('/')
+        file_name = file_items[len(file_items) - 1]
+        # print('file_name: ', file_name)
+
+        if not file_name.lower().endswith('.jpg'):
             continue
 
-        file_prefix, rest = file.split("_", 1)
+        file_prefix, rest = file_name.split("_", 1)
         k = -1
         try:
             k = part_list.index(file_prefix)
@@ -53,7 +62,7 @@ def load_data_by_name(image_dir, file_list, part_list, image_size, feature_size,
             continue
 
         try:
-            resized_img = load_img(os.path.join(dir, file), image_size)
+            resized_img = load_img(file, image_size)
         except OSError:
             continue
         image_list.append(resized_img)    # [1, height, width, depth] * n
@@ -77,65 +86,114 @@ def load_data_by_name(image_dir, file_list, part_list, image_size, feature_size,
     
     return image_data, label_data, feat_data, name_data
 
-
-def load_data(image_dir, part_list, image_size, feature_size, feature_category):
-    print('=====> load_data: feature size = ', feature_size, ' category = ', feature_category)
-
-    image_data, label_data, feat_data, name_data = load_data_with_name(image_dir, part_list, image_size, feature_size, feature_category)
-
-
-    print('=====> feature shape = ', feat_data.shape)
-#    print(feat_data)
+# def load_data_by_name(image_dir, file_list, part_list, image_size, feature_size, feature_category):
+#     image_list = []
+#     label_list = []
+#     feat_list = []
+#     name_list = []
     
-    return image_data, label_data, feat_data
+#     dir = image_dir
 
-def load_data_with_name(image_dir, part_list, image_size, feature_size, feature_category):
-    image_list = []
-    label_list = []
-    feat_list = []
-    name_list = []
-    
-    dir = image_dir
-
-    if feature_size != 0:
-        print('=====> feature class: ', np.linspace(0, 1, feature_category))
+#     if feature_size != 0:
+#         print('=====> feature class: ', np.linspace(0, 1, feature_category))
         
-    for file in os.listdir(dir):
-        if not file.lower().endswith('.jpg'):
-            continue
+#     for file in file_list:
+# #        print('file: ', os.path.join(dir, file))
+#         if not file.lower().endswith('.jpg'):
+#             continue
 
-        file_prefix, rest = file.split("_", 1)
-        k = -1
-        try:
-            k = part_list.index(file_prefix)
-        except ValueError:
-            print('File without part: ', file)
-            continue
+#         file_prefix, rest = file.split("_", 1)
+#         k = -1
+#         try:
+#             k = part_list.index(file_prefix)
+#         except ValueError:
+#             print('File without part: ', file)
+#             continue
 
-        try:
-            resized_img = load_img(os.path.join(dir, file), image_size)
-        except OSError:
-            continue
-        image_list.append(resized_img)    # [1, height, width, depth] * n
+#         try:
+#             resized_img = load_img(os.path.join(dir, file), image_size)
+#         except OSError:
+#             continue
+#         image_list.append(resized_img)    # [1, height, width, depth] * n
         
-        tag = np.zeros((1, len(part_list)))
-        tag[0][k] = 1
-        label_list.append(tag)
+#         tag = np.zeros((1, len(part_list)))
+#         tag[0][k] = 1
+#         label_list.append(tag)
 
-        if feature_category == 12:
-            feature = create_feature_foreach(k, part_list, feature_size, feature_category)
-        else:
-            feature = create_feature(k, part_list, feature_size, feature_category)
-        feat_list.append(feature)
+#         if feature_category == 12:
+#             feature = create_feature_foreach(k, part_list, feature_size, feature_category)
+#         else:
+#             feature = create_feature(k, part_list, feature_size, feature_category)
+#         feat_list.append(feature)
 
-        name_list.append(file)
+#         name_list.append(file)
     
-    image_data = np.concatenate(image_list, axis=0)
-    label_data = np.concatenate(label_list, axis=0)
-    feat_data = np.concatenate(feat_list, axis=0)
-    name_data = np.array(name_list)
+#     image_data = np.concatenate(image_list, axis=0)
+#     label_data = np.concatenate(label_list, axis=0)
+#     feat_data = np.concatenate(feat_list, axis=0)
+#     name_data = np.array(name_list)
     
-    return image_data, label_data, feat_data, name_data
+#     return image_data, label_data, feat_data, name_data
+
+
+# def load_data(image_dir, part_list, image_size, feature_size, feature_category):
+#     print('=====> load_data: feature size = ', feature_size, ' category = ', feature_category)
+
+#     image_data, label_data, feat_data, name_data = load_data_with_name(image_dir, part_list, image_size, feature_size, feature_category)
+
+
+#     print('=====> feature shape = ', feat_data.shape)
+# #    print(feat_data)
+    
+#     return image_data, label_data, feat_data
+
+# def load_data_with_name(image_dir, part_list, image_size, feature_size, feature_category):
+#     image_list = []
+#     label_list = []
+#     feat_list = []
+#     name_list = []
+    
+#     dir = image_dir
+
+#     if feature_size != 0:
+#         print('=====> feature class: ', np.linspace(0, 1, feature_category))
+        
+#     for file in os.listdir(dir):
+#         if not file.lower().endswith('.jpg'):
+#             continue
+
+#         file_prefix, rest = file.split("_", 1)
+#         k = -1
+#         try:
+#             k = part_list.index(file_prefix)
+#         except ValueError:
+#             print('File without part: ', file)
+#             continue
+
+#         try:
+#             resized_img = load_img(os.path.join(dir, file), image_size)
+#         except OSError:
+#             continue
+#         image_list.append(resized_img)    # [1, height, width, depth] * n
+        
+#         tag = np.zeros((1, len(part_list)))
+#         tag[0][k] = 1
+#         label_list.append(tag)
+
+#         if feature_category == 12:
+#             feature = create_feature_foreach(k, part_list, feature_size, feature_category)
+#         else:
+#             feature = create_feature(k, part_list, feature_size, feature_category)
+#         feat_list.append(feature)
+
+#         name_list.append(file)
+    
+#     image_data = np.concatenate(image_list, axis=0)
+#     label_data = np.concatenate(label_list, axis=0)
+#     feat_data = np.concatenate(feat_list, axis=0)
+#     name_data = np.array(name_list)
+    
+#     return image_data, label_data, feat_data, name_data
 
 def create_feature(type, part_list, feature_size, feature_category):
     feat_array = np.linspace(0, 1, feature_category)

@@ -20,6 +20,9 @@ predict_image_dir = 'face_detection/138839393939mix_face_map/'
 batch_size = 2
 pretrain_ckpt = None
 
+train_dir_list = ['image_data/101090840001/Q8H_mix_face/self_train_img/']
+test_dir_list = ['image_data/101090840001/Q8H_mix_face/test_img/']
+
 #part_list = ['in_down_left', 'in_down_right', 'in_down_center', 'in_up_left', 'in_up_right', 'in_up_center',
 #            'out_down_left', 'out_down_right', 'out_down_center', 'out_up_left', 'out_up_right', 'out_up_center']
 
@@ -282,21 +285,24 @@ def train(_feature_size):
     test_feature = np.array([])
     f_dataset = np.array([])
 
-    filename_list = iLoader.load_file_name(train_image_dir)
+    filename_list = iLoader.load_file_from_dir_list(train_dir_list)
     print('=====> total train data length = ', len(filename_list))
     
     BATCH_LOAD = True if len(filename_list) > 200 else False
 
+    test_filename_list = iLoader.load_file_from_dir_list(test_dir_list)
+
     if BATCH_LOAD:
-        test_filename_list = iLoader.load_file_name(test_image_dir)
     #    partial_test_list = iLoader.circular_sample(test_filename_list, 0, 50)
         partial_test_list = np.array(test_filename_list)[np.random.choice(len(test_filename_list), 50, replace=False)]
-        test_dataset, test_label, test_feature, test_name = iLoader.load_data_by_name(test_image_dir, file_list=partial_test_list,
+        test_dataset, test_label, test_feature, test_name = iLoader.load_data_by_fullname(file_list=partial_test_list,
                     part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE, feature_size=_feature_size, feature_category=FEATURE_CLASS)
     else:
-        train_dataset, label_dataset, feature_dataset = iLoader.load_data(train_image_dir, part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE, feature_size=_feature_size, feature_category=FEATURE_CLASS)
+        train_dataset, label_dataset, feature_dataset, name_dataset = iLoader.load_data_by_fullname(file_list=filename_list,
+            part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE, feature_size=_feature_size, feature_category=FEATURE_CLASS)
         print("=====> train dataset shape = ", train_dataset.shape)
-        test_dataset, test_label, test_feature = iLoader.load_data(test_image_dir, part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE, feature_size=_feature_size, feature_category=FEATURE_CLASS)
+        test_dataset, test_label, test_feature, test_name = iLoader.load_data_by_fullname(file_list=test_filename_list,
+            part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE, feature_size=_feature_size, feature_category=FEATURE_CLASS)
 
     print('=====> test_dataset = ', test_dataset.shape)
 
@@ -315,7 +321,7 @@ def train(_feature_size):
                 partial_filename_list = iLoader.circular_sample(filename_list, file_index, file_batch_size)
                 print('=====> train index ', file_index, ' to ', file_index+file_batch_size) 
                 file_index += file_batch_size
-                train_dataset, label_dataset, feature_dataset, name_dataset = iLoader.load_data_by_name(train_image_dir, file_list=partial_filename_list,
+                train_dataset, label_dataset, feature_dataset, name_dataset = iLoader.load_data_by_fullname(file_list=partial_filename_list,
                     part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE, feature_size=_feature_size, feature_category=FEATURE_CLASS)
                 print('=====> train from ', name_dataset[0], ' to ', name_dataset[len(name_dataset)-1])
 
@@ -376,8 +382,8 @@ def predict(_feature_size, ckpt_num=4000):
 
 def print_params():
 	print('=====>')
-	print('training data DIR: ', train_image_dir)
-	print('testing data DIR: ', test_image_dir)
+	print('training data DIR: ', train_dir_list)
+	print('testing data DIR: ', test_dir_list)
 	print('predicting data DIR: ', predict_image_dir)
 	print('image size: ', IMAGE_SIZE)
 	print('feature class: ', FEATURE_CLASS)
@@ -428,10 +434,10 @@ if __name__ == '__main__':
         _feature_size = args.feature
 
     if args.mode == None:
-#        feature_data = iLoader.create_feature('predict_img_all', part_list=TEETH_PART_LIST, feature_size=5, feature_category=FEATURE_CLASS)
-#        iLoader.load_file_name(train_image_dir)
-#        train_dataset, label_dataset, feature_dataset = iLoader.load_data(train_image_dir, part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE, feature_size=_feature_size, feature_category=FEATURE_CLASS)
-        test_partial_file()
+        # dir_list = ['my_test_dir/100001/', 'my_test_dir/100002/', 'my_test_dir/100003/']
+        # result = iLoader.load_file_from_dir_list(dir_list)
+        # test_dataset, test_label, test_feature, test_name = iLoader.load_data_by_fullname(file_list=result,
+        #             part_list=TEETH_PART_LIST, image_size=224, feature_size=0, feature_category=12)
         print('please input mode with --mode')
     else:
         print_params()
