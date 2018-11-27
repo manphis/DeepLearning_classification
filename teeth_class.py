@@ -9,19 +9,33 @@ import Utils as utils
 from collections import namedtuple
 import plot_utils as pu
 import image_loader as iLoader
+from random import shuffle
 
 
-IMAGE_SIZE = 224
+
 FEATURE_CLASS = 12
+
+g_image_size = 224
+g_feature_size = 0
+g_pretrain_ckpt = None
+g_mode = ''
+g_data_size = 0
+g_train_data_size = 0
+g_test_data_size = 0
+g_file_batch_size = 100
+g_train_batch_size = 2
+g_gap_layer = True
 
 train_image_dir = 'image_data/101090840001/Q8H_mix_face/self_train_img/'
 test_image_dir = 'image_data/101090840001/Q8H_mix_face/test_img/'
 predict_image_dir = 'face_detection/138839393939mix_face_map/'
-batch_size = 2
-pretrain_ckpt = None
 
-train_dir_list = ['image_data/101090840001/Q8H_mix_face/self_train_img/']
-test_dir_list = ['image_data/101090840001/Q8H_mix_face/test_img/']
+
+g_data_dir_list = ['image_data/000000000038/Q8H_origin_image/train_img/'
+,'image_data/000000016400/Q8H_origin_image/train_img/'
+,'image_data/101090840001/Q8H_origin_image/train_img/'
+,'image_data/138839393939/Q8H_origin_image/train_img/'
+]
 
 #part_list = ['in_down_left', 'in_down_right', 'in_down_center', 'in_up_left', 'in_up_right', 'in_up_center',
 #            'out_down_left', 'out_down_right', 'out_down_center', 'out_up_left', 'out_up_right', 'out_up_center']
@@ -109,35 +123,30 @@ class MyNet:
         utils.get_model_data(MODEL_DIR, MODEL_URL)
 
 #		transfer learning from MobilenetV1        
-        mobilenet_net = self.get_mobile_net(self.x, final_endpoint="Conv2d_11")
+        self.mobilenet_net = self.get_mobile_net(self.x, final_endpoint="Conv2d_11")
         variable_to_restore = [v for v in slim.get_variables_to_restore() if v.name.split('/')[0] == 'MobilenetV1']
 #       shape of mobilenet_net: (?, 14, 14, 512)
 
 #       self.size = (int)(image_size/4)
 #       convo_2_flat = tf.reshape(convo_2_pooling, [-1, self.size*self.size*64])
         self.size = 14*14*512
+        self.gap_layer = gap_layer
 
-        print("=====> MyNet: gap = ", gap_layer)
-
-        if gap_layer:
+        if self.gap_layer:
             # GAP layer
             self.gap_weight = tf.Variable(tf.random_normal([512, len(TEETH_PART_LIST)]))
             self.gap_bias = tf.Variable(tf.random_normal([len(TEETH_PART_LIST)]))
-            self.y_pred = self.gap_out_layer(mobilenet_net, self.gap_weight, self.gap_bias)
+            self.y_pred = self.gap_out_layer(self.mobilenet_net, self.gap_weight, self.gap_bias)
         else:
-            convo_2_flat = tf.reshape(mobilenet_net, [-1, self.size])
-
-            print("=====> MyNet: feature size = ", feature_size)
+            self.convo_2_flat = tf.reshape(self.mobilenet_net, [-1, self.size])
 
             if feature_size != 0:
-                convo_2_flat = tf.concat( [convo_2_flat, self.x_feat], 1 )
+                self.convo_2_flat = tf.concat( [self.convo_2_flat, self.x_feat], 1 )
 
-            print("=====> MyNet: convo_2_flat shape = ", convo_2_flat.shape)
+            self.full_layer_one = tf.nn.relu(self.normal_full_layer(self.convo_2_flat, 1024))
+            self.full_one_dropout = tf.nn.dropout(self.full_layer_one, keep_prob=self.hold_prob)
 
-            full_layer_one = tf.nn.relu(self.normal_full_layer(convo_2_flat, 1024))
-            full_one_dropout = tf.nn.dropout(full_layer_one, keep_prob=self.hold_prob)
-
-            self.y_pred = self.normal_full_layer(full_one_dropout, category_size)
+            self.y_pred = self.normal_full_layer(self.full_one_dropout, category_size)
 
 
         self.sess = tf.Session()
@@ -149,7 +158,7 @@ class MyNet:
 
             self.position = tf.argmax(self.y_pred,1)
 
-            self.classmaps = self.generate_heatmap(mobilenet_net, self.position, self.gap_weight, IMAGE_SIZE)
+            self.classmaps = self.generate_heatmap(self.mobilenet_net, self.position, self.gap_weight, image_size)
 
         else:
             self.cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.y_true,logits=self.y_pred))
@@ -164,25 +173,32 @@ class MyNet:
             self.sess.run(tf.global_variables_initializer())
 
     #       restore pre-train mobilenet
-            if pretrain_ckpt == None:
+            if g_pretrain_ckpt == None:
                 self.saver = tf.train.Saver(variable_to_restore)
                 self.saver.restore(self.sess, 'Model_zoo/mobilenet_v1_1.0_224.ckpt')
             else:
-                print('=====> load pretrain model: ', 'pretrain_model/model.ckpt-'+str(pretrain_ckpt))
                 self.saver = tf.train.Saver()
-                self.saver.restore(self.sess, 'pretrain_model/model.ckpt-'+str(pretrain_ckpt))
+                self.saver.restore(self.sess, 'pretrain_model/model.ckpt-'+str(g_pretrain_ckpt))
 
-        print("=====> build MyNet done")
+        self.print_params()
 
         return
 
+    def print_params(self):
+        print("===== build MyNet done =================")
+        print('MyNet: pretrain_ckpt        ', 'pretrain_model/model.ckpt-'+str(g_pretrain_ckpt))
+        print('MyNet: feature_size         ', self.feature_size)
+        print('MyNet: gap_layer =          ', self.gap_layer)
+        # print('MyNet: convo_2_flat shape = ', self.convo_2_flat.shape)
+        print("========================================")
+        return
 
     def train(self, x_dataset, y_dataset, f_dataset):
 #       print("x_shape: ", x_dataset.shape, "y_shape: ", y_dataset.shape, "f_shape: ", f_dataset.shape)
         if self.feature_size != 0:
-            loss, _ = self.sess.run([self.cross_entropy, self.train_op], feed_dict={self.x: x_dataset, self.y_true: y_dataset, self.x_feat: f_dataset, self.hold_prob: 0.75})
+            loss, _ = self.sess.run([self.cross_entropy, self.train_op], feed_dict={self.x: x_dataset, self.y_true: y_dataset, self.x_feat: f_dataset, self.hold_prob: 0.5})
         else:
-            loss, _ = self.sess.run([self.cross_entropy, self.train_op], feed_dict={self.x: x_dataset, self.y_true: y_dataset, self.hold_prob: 0.75})
+            loss, _ = self.sess.run([self.cross_entropy, self.train_op], feed_dict={self.x: x_dataset, self.y_true: y_dataset, self.hold_prob: 0.5})
 
         return loss
 
@@ -281,64 +297,65 @@ class MyNet:
 
     
 
-def train(_feature_size):
+def train():
+    global g_data_size, g_test_data_size, g_train_data_size
     test_feature = np.array([])
     f_dataset = np.array([])
 
-    filename_list = iLoader.load_file_from_dir_list(train_dir_list)
-    print('=====> total train data length = ', len(filename_list))
+    filename_list = iLoader.load_file_from_dir_list(g_data_dir_list)
+    g_data_size = len(filename_list)
+
+    shuffle(filename_list)
+    g_test_data_size = int(g_data_size*0.1)
+    g_train_data_size = g_data_size - g_test_data_size
+    test_filename_list = filename_list[0:g_test_data_size]
+    train_filename_list = filename_list[g_test_data_size:]
+
+    test_dataset, test_label, test_feature, test_name = iLoader.load_data_by_fullname(file_list=test_filename_list,
+                    part_list=TEETH_PART_LIST, image_size=g_image_size, feature_size=g_feature_size, feature_category=FEATURE_CLASS)
     
-    BATCH_LOAD = True if len(filename_list) > 200 else False
+    BATCH_LOAD = True if g_train_data_size > 400 else False
 
-    test_filename_list = iLoader.load_file_from_dir_list(test_dir_list)
-
-    if BATCH_LOAD:
-    #    partial_test_list = iLoader.circular_sample(test_filename_list, 0, 50)
-        partial_test_list = np.array(test_filename_list)[np.random.choice(len(test_filename_list), 50, replace=False)]
-        test_dataset, test_label, test_feature, test_name = iLoader.load_data_by_fullname(file_list=partial_test_list,
-                    part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE, feature_size=_feature_size, feature_category=FEATURE_CLASS)
-    else:
-        train_dataset, label_dataset, feature_dataset, name_dataset = iLoader.load_data_by_fullname(file_list=filename_list,
-            part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE, feature_size=_feature_size, feature_category=FEATURE_CLASS)
-        print("=====> train dataset shape = ", train_dataset.shape)
-        test_dataset, test_label, test_feature, test_name = iLoader.load_data_by_fullname(file_list=test_filename_list,
-            part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE, feature_size=_feature_size, feature_category=FEATURE_CLASS)
+    if not BATCH_LOAD:
+        train_dataset, label_dataset, feature_dataset, name_dataset = iLoader.load_data_by_fullname(file_list=train_filename_list,
+            part_list=TEETH_PART_LIST, image_size=g_image_size, feature_size=g_feature_size, feature_category=FEATURE_CLASS)
 
     print('=====> test_dataset = ', test_dataset.shape)
 
     index = 0
     accuracy_list = []
 
-    my_net = MyNet(image_size=IMAGE_SIZE, category_size=len(TEETH_PART_LIST), feature_size=_feature_size)
+    my_net = MyNet(image_size=g_image_size, category_size=len(TEETH_PART_LIST), feature_size=g_feature_size, gap_layer=g_gap_layer)
 
-    file_batch_size = 100
+    print_params()
+
     file_index = 0
 
     for i in range(5000):
         if BATCH_LOAD:
             if i%100 == 0:
                 index = 0
-                partial_filename_list = iLoader.circular_sample(filename_list, file_index, file_batch_size)
-                print('=====> train index ', file_index, ' to ', file_index+file_batch_size) 
-                file_index += file_batch_size
+                partial_filename_list = iLoader.circular_sample(train_filename_list, file_index, g_file_batch_size)
+                print('=====> train index ', file_index, ' to ', file_index+g_file_batch_size) 
+                file_index += g_file_batch_size
                 train_dataset, label_dataset, feature_dataset, name_dataset = iLoader.load_data_by_fullname(file_list=partial_filename_list,
-                    part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE, feature_size=_feature_size, feature_category=FEATURE_CLASS)
-                print('=====> train from ', name_dataset[0], ' to ', name_dataset[len(name_dataset)-1])
+                    part_list=TEETH_PART_LIST, image_size=g_image_size, feature_size=g_feature_size, feature_category=FEATURE_CLASS)
+                print('=====> train from ', name_dataset[0], ' to ', name_dataset[len(name_dataset)-1], ' size = ', len(train_dataset))
 
 
-        x_dataset = train_dataset[index:index+batch_size].reshape(-1, IMAGE_SIZE, IMAGE_SIZE, 3)
-        y_dataset = label_dataset[index:index+batch_size].reshape(-1, len(TEETH_PART_LIST))
+        x_dataset = train_dataset[index:index+g_train_batch_size].reshape(-1, g_image_size, g_image_size, 3)
+        y_dataset = label_dataset[index:index+g_train_batch_size].reshape(-1, len(TEETH_PART_LIST))
         
-        if _feature_size != 0:
-            f_dataset = feature_dataset[index:index+batch_size].reshape(-1, _feature_size)
+        if g_feature_size != 0:
+            f_dataset = feature_dataset[index:index+g_train_batch_size].reshape(-1, g_feature_size)
 
-        index = (index+batch_size) % len(train_dataset)
+        index = (index+g_train_batch_size) % len(train_dataset)
 
         loss = my_net.train(x_dataset, y_dataset, f_dataset)
 #       print("loss = ", loss)
         if i%100 == 0:
             acc, matrix = my_net.validate_matrix(test_dataset, test_label, test_feature)
-            print(matrix)
+            # print(matrix)
             print('step {}'.format(i), ' ; loss = ', loss, ' ; accuracy = ', acc)
 
             accuracy_list.append(acc)
@@ -358,7 +375,7 @@ def predict(_feature_size, ckpt_num=4000):
     #     predict_feature = create_feature(predict_image_dir, part_dir_list=TEETH_PART_LIST, feature_size=_feature_size)
 
     ckpt_file = 'logs/model.ckpt-' + str(ckpt_num)
-    my_net = MyNet(image_size=IMAGE_SIZE, category_size=len(TEETH_PART_LIST), feature_size=_feature_size, predict_ckpt=ckpt_file, gap_layer=True)
+    my_net = MyNet(image_size=IMAGE_SIZE, category_size=len(TEETH_PART_LIST), feature_size=_feature_size, predict_ckpt=ckpt_file, gap_layer=g_gap_layer)
 
     result = my_net.predict(predict_dataset, predict_feature)
 
@@ -381,16 +398,28 @@ def predict(_feature_size, ckpt_num=4000):
     return
 
 def print_params():
-	print('=====>')
-	print('training data DIR: ', train_dir_list)
-	print('testing data DIR: ', test_dir_list)
-	print('predicting data DIR: ', predict_image_dir)
-	print('image size: ', IMAGE_SIZE)
-	print('feature class: ', FEATURE_CLASS)
-	print('training batch size: ', batch_size)
+    print('========================================')
+    print('=                                      =')
+    print('=           parameter list             =')
+    print('=                                      =')
+    print('========================================')
+    print('data DIR: ', g_data_dir_list)
+    print('predicting data DIR: ', predict_image_dir)
+    print('feature class:      ', FEATURE_CLASS)
 
-	print('<=====')
-	return
+    print('g_image_size        ', g_image_size)
+    print('g_feature_size      ', g_feature_size)
+    print('g_pretrain_ckpt     ', g_pretrain_ckpt)
+    print('g_mode              ', g_mode)
+    print('g_data_size         ', g_data_size)
+    print('g_train_data_size   ', g_train_data_size)
+    print('g_test_data_size    ', g_test_data_size)
+    print('g_file_batch_size   ', g_file_batch_size)
+    print('g_train_batch_size  ', g_train_batch_size)
+    print('g_gap_layer         ', g_gap_layer)
+
+    print('========================================')
+    return
 
 
 def test_confusion_matrix():
@@ -408,16 +437,16 @@ def test_partial_file():
     print('total file name = ', filename_list)
     index = 0
 
-    file_batch_size = 3
+    g_file_batch_size = 3
     file_index = 0
 
     for i in range(10):
         if i%2 == 0:
             index = 0
-            partial_filename_list = iLoader.circular_sample(filename_list, file_index, file_batch_size)
+            partial_filename_list = iLoader.circular_sample(filename_list, file_index, g_file_batch_size)
             print('file name = ', partial_filename_list)
 
-            file_index += file_batch_size
+            file_index += g_file_batch_size
             train_dataset, label_dataset, feature_dataset, name_dataset = iLoader.load_data_by_name(test_dir, file_list=partial_filename_list,
                 part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE, feature_size=_feature_size, feature_category=FEATURE_CLASS)
 
@@ -428,27 +457,20 @@ def test_partial_file():
 
 
 if __name__ == '__main__':
-    if args.feature == None:
-        _feature_size = 0
-    else:
-        _feature_size = args.feature
+    g_feature_size = 0 if args.feature == None else args.feature
 
     if args.mode == None:
-        # dir_list = ['my_test_dir/100001/', 'my_test_dir/100002/', 'my_test_dir/100003/']
-        # result = iLoader.load_file_from_dir_list(dir_list)
         # test_dataset, test_label, test_feature, test_name = iLoader.load_data_by_fullname(file_list=result,
         #             part_list=TEETH_PART_LIST, image_size=224, feature_size=0, feature_category=12)
         print('please input mode with --mode')
     else:
-        print_params()
-        if args.mode == 'train':
-            print('training...')
-            train(_feature_size)
-        elif args.mode == 'train-with-pretrain':
-            pretrain_ckpt = args.checkpoint
-            train(_feature_size)
+        g_mode = args.mode
+        if 'train' in g_mode:
+            if g_mode == 'train-with-pretrain':
+                g_pretrain_ckpt = args.checkpoint
+            train()
 
-        elif args.mode == 'predict':
+        elif g_mode == 'predict':
             print('predicting...')
             if args.checkpoint == None:
                 predict(_feature_size)
