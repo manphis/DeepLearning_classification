@@ -25,6 +25,8 @@ g_test_data_size = 0
 g_file_batch_size = 100
 g_train_batch_size = 2
 g_gap_layer = True
+g_acc_save_threshold = 0.85
+g_training_iteration = 5000
 
 train_image_dir = 'image_data/101090840001/Q8H_mix_face/self_train_img/'
 test_image_dir = 'image_data/101090840001/Q8H_mix_face/test_img/'
@@ -330,8 +332,9 @@ def train():
     print_params()
 
     file_index = 0
+    global g_acc_save_threshold
 
-    for i in range(5000):
+    for i in range(g_training_iteration):
         if BATCH_LOAD:
             if i%100 == 0:
                 index = 0
@@ -340,7 +343,7 @@ def train():
                 file_index += g_file_batch_size
                 train_dataset, label_dataset, feature_dataset, name_dataset = iLoader.load_data_by_fullname(file_list=partial_filename_list,
                     part_list=TEETH_PART_LIST, image_size=g_image_size, feature_size=g_feature_size, feature_category=FEATURE_CLASS)
-                print('=====> train from ', name_dataset[0], ' to ', name_dataset[len(name_dataset)-1], ' size = ', len(train_dataset))
+                # print('=====> train from ', name_dataset[0], ' to ', name_dataset[len(name_dataset)-1], ' size = ', len(train_dataset))
 
 
         x_dataset = train_dataset[index:index+g_train_batch_size].reshape(-1, g_image_size, g_image_size, 3)
@@ -359,7 +362,11 @@ def train():
             print('step {}'.format(i), ' ; loss = ', loss, ' ; accuracy = ', acc)
 
             accuracy_list.append(acc)
-            my_net.save_checkpoint(LOG_DIR + "model.ckpt", i)
+
+            if acc > g_acc_save_threshold:
+                print('save ckpt')
+                my_net.save_checkpoint(LOG_DIR + "model.ckpt", i)
+                # g_acc_save_threshold = acc
 
 #    save_train_result(accuracy_list)
     print(accuracy_list)
@@ -399,24 +406,27 @@ def predict(_feature_size, ckpt_num=4000):
 
 def print_params():
     print('========================================')
-    print('=                                      =')
-    print('=           parameter list             =')
-    print('=                                      =')
+    print('|                                      |')
+    print('|           parameter list             |')
+    print('|                                      |')
     print('========================================')
-    print('data DIR: ', g_data_dir_list)
+    print('data DIR:            ', g_data_dir_list)
     print('predicting data DIR: ', predict_image_dir)
-    print('feature class:      ', FEATURE_CLASS)
+    print('feature class:       ', FEATURE_CLASS)
 
-    print('g_image_size        ', g_image_size)
-    print('g_feature_size      ', g_feature_size)
-    print('g_pretrain_ckpt     ', g_pretrain_ckpt)
-    print('g_mode              ', g_mode)
-    print('g_data_size         ', g_data_size)
-    print('g_train_data_size   ', g_train_data_size)
-    print('g_test_data_size    ', g_test_data_size)
-    print('g_file_batch_size   ', g_file_batch_size)
-    print('g_train_batch_size  ', g_train_batch_size)
-    print('g_gap_layer         ', g_gap_layer)
+    print('g_image_size         ', g_image_size)
+    print('g_feature_size       ', g_feature_size)
+    print('g_pretrain_ckpt      ', g_pretrain_ckpt)
+    print('g_mode               ', g_mode)
+    print('g_data_size          ', g_data_size)
+    print('g_train_data_size    ', g_train_data_size)
+    print('g_test_data_size     ', g_test_data_size)
+    print('g_file_batch_size    ', g_file_batch_size)
+    print('g_train_batch_size   ', g_train_batch_size)
+    print('g_gap_layer          ', g_gap_layer)
+    print('g_acc_save_threshold ', g_acc_save_threshold)
+    print('g_training_iteration ', g_training_iteration)
+    print('g_has_gsensor        ', iLoader.g_has_gsensor)
 
     print('========================================')
     return
