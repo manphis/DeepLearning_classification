@@ -27,6 +27,8 @@ g_train_batch_size = 2
 g_gap_layer = True
 g_acc_save_threshold = 0.85
 g_training_iteration = 5000
+g_ckpt_id = 4000
+g_predict_data_size = 20
 
 train_image_dir = 'image_data/101090840001/Q8H_mix_face/self_train_img/'
 test_image_dir = 'image_data/101090840001/Q8H_mix_face/test_img/'
@@ -37,6 +39,9 @@ g_data_dir_list = ['image_data/000000000038/Q8H_origin_image/train_img/'
 ,'image_data/000000016400/Q8H_origin_image/train_img/'
 ,'image_data/101090840001/Q8H_origin_image/train_img/'
 ,'image_data/138839393939/Q8H_origin_image/train_img/'
+,'image_data/000000000083/Q8H_origin_image/train_img/'
+]
+g_predict_data_dir_list = ['image_data/000000000083/predict_data/'
 ]
 
 #part_list = ['in_down_left', 'in_down_right', 'in_down_center', 'in_up_left', 'in_up_right', 'in_up_center',
@@ -159,8 +164,8 @@ class MyNet:
             self.saver.restore(self.sess, predict_ckpt)
 
             self.position = tf.argmax(self.y_pred,1)
-
-            self.classmaps = self.generate_heatmap(self.mobilenet_net, self.position, self.gap_weight, image_size)
+            if self.gap_layer:
+                self.classmaps = self.generate_heatmap(self.mobilenet_net, self.position, self.gap_weight, image_size)
 
         else:
             self.cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.y_true,logits=self.y_pred))
@@ -267,7 +272,6 @@ class MyNet:
         else:
             idx = self.sess.run(self.position, feed_dict={self.x:predict_dataset, self.hold_prob:1.0})
 
-        print('predict index = ', idx)
         return idx
 
     def activation_map(self, predict_dataset, predict_feature):
@@ -363,7 +367,7 @@ def train():
 
             accuracy_list.append(acc)
 
-            if acc > g_acc_save_threshold:
+            if acc > g_acc_save_threshold: #and loss < 0.001:
                 print('save ckpt')
                 my_net.save_checkpoint(LOG_DIR + "model.ckpt", i)
                 # g_acc_save_threshold = acc
@@ -372,35 +376,57 @@ def train():
     print(accuracy_list)
     return
 
-def predict(_feature_size, ckpt_num=4000):
-    predict_feature = np.array([])
-    predict_dataset, predict_label, predict_feature, predict_file_name = iLoader.load_data_with_name(predict_image_dir, 
-    	part_list=TEETH_PART_LIST, image_size=IMAGE_SIZE, feature_size=_feature_size, feature_category=FEATURE_CLASS)
+def predict():
+    ckpt_file = 'logs/model.ckpt-' + str(g_ckpt_id)
+    my_net = MyNet(image_size=g_image_size, category_size=len(TEETH_PART_LIST), feature_size=g_feature_size, predict_ckpt=ckpt_file, gap_layer=g_gap_layer)
 
-    print(predict_file_name)
-    # if _feature_size != 0:
-    #     predict_feature = create_feature(predict_image_dir, part_dir_list=TEETH_PART_LIST, feature_size=_feature_size)
+    print_params()
+    
+    filename_list = iLoader.load_file_from_dir_list(g_predict_data_dir_list)
 
-    ckpt_file = 'logs/model.ckpt-' + str(ckpt_num)
-    my_net = MyNet(image_size=IMAGE_SIZE, category_size=len(TEETH_PART_LIST), feature_size=_feature_size, predict_ckpt=ckpt_file, gap_layer=g_gap_layer)
+    data_len = len(filename_list)
+    index = 0
+    count = 0
+    error_count = 0
 
-    result = my_net.predict(predict_dataset, predict_feature)
+    while index < data_len:
+        if index + g_predict_data_size > data_len:
+            predict_filename_list = filename_list[index:]
+        else:
+            predict_filename_list = filename_list[index:(index+g_predict_data_size)]
+        index = index + g_predict_data_size
+        count += 1
 
-    maps = my_net.activation_map(predict_dataset, predict_feature)
+        predict_dataset, predict_label, predict_feature, predict_name = iLoader.load_data_by_fullname(file_list=predict_filename_list,
+                        part_list=TEETH_PART_LIST, image_size=g_image_size, feature_size=g_feature_size, feature_category=FEATURE_CLASS)
 
-    error_list = []
-    correct_list = []
-    index_list = []
-    for i in range(len(result)):
-        if result[i] != np.argmax(predict_label[i]):
-            print('error: ', TEETH_PART_LIST[result[i]], '   ', predict_file_name[i])
-            error_list.append(TEETH_PART_LIST[result[i]])
-            correct_list.append(TEETH_PART_LIST[np.argmax(predict_label[i])])
-            index_list.append(i)
+        result = my_net.predict(predict_dataset, predict_feature)
+        if g_gap_layer:
+            maps = my_net.activation_map(predict_dataset, predict_feature)
 
+        print('predict result = ', result)
+
+        label_list = []
+        error_list = []
+        correct_list = []
+        index_list = []
+        for i in range(len(result)):
+            label_list.append(np.argmax(predict_label[i]))
+            if result[i] != np.argmax(predict_label[i]):
+                error_count += 1
+                print('error: ', TEETH_PART_LIST[result[i]], '   ', predict_name[i])
+                error_list.append(TEETH_PART_LIST[result[i]])
+                correct_list.append(TEETH_PART_LIST[np.argmax(predict_label[i])])
+                index_list.append(i)
+        print('label result   = ', label_list)
+        print('accumulated error count = ', error_count)
+        # predict_acc = (len(result)-len(error_list))/len(result)
+        # print('predict accuracy = ', (len(result)-len(error_list)), '/', len(result), ' = ', predict_acc)
+
+    print('predict accuracy = ', (data_len-error_count)/data_len)
 #    pu.plot_error_result(error_list, correct_list, predict_dataset, index_list)
 
-    pu.plot_classmap(predict_dataset, maps)
+    # pu.plot_classmap(predict_dataset, maps)
 
     return
 
@@ -411,7 +437,7 @@ def print_params():
     print('|                                      |')
     print('========================================')
     print('data DIR:            ', g_data_dir_list)
-    print('predicting data DIR: ', predict_image_dir)
+    print('predicting data DIR: ', g_predict_data_dir_list)
     print('feature class:       ', FEATURE_CLASS)
 
     print('g_image_size         ', g_image_size)
@@ -427,6 +453,8 @@ def print_params():
     print('g_acc_save_threshold ', g_acc_save_threshold)
     print('g_training_iteration ', g_training_iteration)
     print('g_has_gsensor        ', iLoader.g_has_gsensor)
+    print('g_ckpt_id            ', g_ckpt_id)
+    print('g_predict_data_size  ', g_predict_data_size)
 
     print('========================================')
     return
@@ -482,9 +510,8 @@ if __name__ == '__main__':
 
         elif g_mode == 'predict':
             print('predicting...')
-            if args.checkpoint == None:
-                predict(_feature_size)
-            else:
-                predict(_feature_size, args.checkpoint)
+            if args.checkpoint != None:
+                g_ckpt_id = args.checkpoint
+            predict()
         else:
             print('please use -h to know how to use --mode')
