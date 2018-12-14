@@ -25,23 +25,18 @@ g_test_data_size = 0
 g_file_batch_size = 100
 g_train_batch_size = 2
 g_gap_layer = True
-g_acc_save_threshold = 0.85
+g_acc_save_threshold = 0.9
 g_training_iteration = 5000
 g_ckpt_id = 4000
 g_predict_data_size = 20
 
-train_image_dir = 'image_data/101090840001/Q8H_mix_face/self_train_img/'
-test_image_dir = 'image_data/101090840001/Q8H_mix_face/test_img/'
-predict_image_dir = 'face_detection/138839393939mix_face_map/'
-
-
-g_data_dir_list = ['image_data/000000000038/Q8H_origin_image/train_img/'
-,'image_data/000000016400/Q8H_origin_image/train_img/'
-,'image_data/101090840001/Q8H_origin_image/train_img/'
-,'image_data/138839393939/Q8H_origin_image/train_img/'
-,'image_data/000000000083/Q8H_origin_image/train_img/'
+g_data_dir_list = ['image_data/000000000038/Q8H_gsensor/'
+,'image_data/000000016400/Q8H_gsensor/'
+# ,'image_data/101090840001/Q8H_origin_image/train_img/'
+# ,'image_data/138839393939/Q8H_origin_image/train_img/'
+# ,'image_data/000000000083/Q8H_origin_image/train_img/'
 ]
-g_predict_data_dir_list = ['image_data/000000000083/predict_data/'
+g_predict_data_dir_list = ['predict/'
 ]
 
 #part_list = ['in_down_left', 'in_down_right', 'in_down_center', 'in_up_left', 'in_up_right', 'in_up_center',
@@ -426,7 +421,7 @@ def predict():
     print('predict accuracy = ', (data_len-error_count)/data_len)
 #    pu.plot_error_result(error_list, correct_list, predict_dataset, index_list)
 
-    # pu.plot_classmap(predict_dataset, maps)
+    pu.plot_classmap(predict_dataset, maps)
 
     return
 

@@ -4,9 +4,9 @@ import skimage.io
 import skimage.transform
 from itertools import cycle, islice
 
-g_has_gsensor = False
+g_has_gsensor = True
 
-G_SENSOR_COLOR_LENGTH = 10
+G_SENSOR_COLOR_LENGTH = 20
 COLOR_LIST = [[15, 67, 121], [240, 70, 142], [117, 6, 87], [30, 209, 125], [230, 202, 136],
               [126, 255, 127], [239, 186, 145], [5, 158, 146], [128, 254, 139], [210, 222, 146], [64, 237, 143], [120, 254, 132]]
 
@@ -71,7 +71,9 @@ def load_data_by_fullname(file_list, part_list, image_size, feature_size, featur
             resized_img = load_img(file, image_size)
             # add g-sensor color to image
             if g_has_gsensor:
-                assign_color(resized_img[0], COLOR_LIST[k][0], COLOR_LIST[k][1], COLOR_LIST[k][2])
+                g_str, rest = rest.split("_", 1)
+                assign_color_by_gsensor(resized_img[0], g_str)
+                # assign_color(resized_img[0], COLOR_LIST[k][0], COLOR_LIST[k][1], COLOR_LIST[k][2])
 
             # test_img = resized_img[0][:,:,0]
             # print("img data = ", test_img[0][0], test_img[0][1], test_img[0][2], test_img[0][3], test_img[0][4])
@@ -241,9 +243,28 @@ def create_feature_foreach(type, part_list, feature_size, feature_category):
 #     feature[0][index] = 1
     
 #     return feature
+def hexToSignedInt(hex):
+        value = int("0x"+hex, 0);
+        if value > 127:
+            value = value - 256;
+        return value
+
+def assign_color_by_gsensor(img, g_str):
+    p = g_str[1:]
+
+    xAxis = p[0:2]
+    yAxis = p[2:4]
+    zAxis = p[4:6]
+
+    a = (hexToSignedInt(xAxis) + 64) * 2
+    b = (hexToSignedInt(yAxis) + 64) * 2
+    c = (hexToSignedInt(zAxis) + 64) * 2
+
+    assign_color(img, a, b, c)
+    return
 
 def assign_color(img, r, g, b):
-    print('assign_color')
+    # print('assign_color')
     imgR = img[:,:,0]
     imgG = img[:,:,1]
     imgB = img[:,:,2]
